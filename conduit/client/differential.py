@@ -1,3 +1,4 @@
+import json
 from typing import Any, Dict, List
 
 from conduit.client.base import BasePhabricatorClient
@@ -260,6 +261,8 @@ class DifferentialClient(BasePhabricatorClient):
         Returns:
             Result
         """
+        if isinstance(data, (list, dict)):
+            data = json.dumps(data)
         return self._make_request(
             "differential.setdiffproperty",
             {"diff_id": diff_id, "name": name, "data": data},
