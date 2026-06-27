@@ -100,8 +100,8 @@ class TestHarbormasterClient:
         mock_request.assert_called_once_with(
             "harbormaster.build.search",
             {
-                "constraints": {"status": "passed"},
                 "limit": 10,
+                "constraints[status]": "passed",
             },
         )
 
@@ -151,8 +151,8 @@ class TestHarbormasterClient:
         mock_request.assert_called_once_with(
             "harbormaster.buildplan.search",
             {
-                "constraints": {"name": "CI"},
                 "limit": 10,
+                "constraints[name]": "CI",
             },
         )
 
@@ -202,8 +202,8 @@ class TestPasteClient:
         mock_request.assert_called_once_with(
             "paste.search",
             {
-                "constraints": {"authorPHIDs": ["PHID-USER-1"]},
                 "limit": 10,
+                "constraints[authorPHIDs][0]": "PHID-USER-1",
             },
         )
 
@@ -334,8 +334,8 @@ class TestPhrictionClient:
         mock_request.assert_called_once_with(
             "phriction.content.search",
             {
-                "constraints": {"documentPHID": "PHID-WIKI-doc1"},
                 "limit": 100,
+                "constraints[documentPHID]": "PHID-WIKI-doc1",
             },
         )
 

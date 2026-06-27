@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from conduit.client.base import BasePhabricatorClient
+from conduit.utils import build_search_params
 
 
 class ConduitClient(BasePhabricatorClient):
@@ -65,9 +66,7 @@ class HarbormasterClient(BasePhabricatorClient):
         Returns:
             Build information
         """
-        params = {"limit": limit}
-        if constraints:
-            params["constraints"] = constraints
+        params = build_search_params(constraints=constraints, limit=limit)
 
         return self._make_request("harbormaster.build.search", params)
 
@@ -84,9 +83,7 @@ class HarbormasterClient(BasePhabricatorClient):
         Returns:
             Buildable information
         """
-        params = {"limit": limit}
-        if constraints:
-            params["constraints"] = constraints
+        params = build_search_params(constraints=constraints, limit=limit)
 
         return self._make_request("harbormaster.buildable.search", params)
 
@@ -103,9 +100,7 @@ class HarbormasterClient(BasePhabricatorClient):
         Returns:
             Build plan information
         """
-        params = {"limit": limit}
-        if constraints:
-            params["constraints"] = constraints
+        params = build_search_params(constraints=constraints, limit=limit)
 
         return self._make_request("harbormaster.buildplan.search", params)
 
@@ -148,9 +143,7 @@ class PasteClient(BasePhabricatorClient):
         Returns:
             Paste information
         """
-        params = {"limit": limit}
-        if constraints:
-            params["constraints"] = constraints
+        params = build_search_params(constraints=constraints, limit=limit)
 
         return self._make_request("paste.search", params)
 
@@ -216,9 +209,7 @@ class PhrictionClient(BasePhabricatorClient):
         Returns:
             Document information
         """
-        params = {"limit": limit}
-        if constraints:
-            params["constraints"] = constraints
+        params = build_search_params(constraints=constraints, limit=limit)
 
         return self._make_request("phriction.document.search", params)
 
@@ -235,9 +226,7 @@ class PhrictionClient(BasePhabricatorClient):
         Returns:
             Content history information
         """
-        params = {"limit": limit}
-        if constraints:
-            params["constraints"] = constraints
+        params = build_search_params(constraints=constraints, limit=limit)
 
         return self._make_request("phriction.content.search", params)
 
