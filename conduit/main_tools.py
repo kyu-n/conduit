@@ -2,6 +2,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastmcp import FastMCP
+from fastmcp.utilities.types import Image
 
 from conduit.client.types import (
     ManiphestSearchAttachments,
@@ -1686,3 +1687,168 @@ def register_tools(  # noqa: C901
         result = _add_pagination_metadata(result, result.get("cursor"))
 
         return {"success": True, "tasks": result}
+
+    @mcp.tool()
+    def pha_file_download(file_ref: str):
+        """
+        Download a file attached to a task (typically a mockup image) and, when
+        it is an image, return it as viewable image content.
+
+        Args:
+            file_ref: A file reference: "F123", "123", or a "PHID-FILE-..."
+                identifier.
+
+        Returns:
+            For an image under the size limit, an Image the model can view
+            directly. For non-image files, oversized files, or errors, a dict
+            with metadata or an error.
+        """
+        import base64
+        import re as _re
+
+        client = get_client_func()
+
+        ref = file_ref.strip()
+        if ref.upper().startswith("PHID-FILE-"):
+            constraints = {"phids": [ref]}
+        else:
+            m = _re.match(r"^F?(\d+)$", ref, _re.IGNORECASE)
+            if not m:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Unrecognized file reference: {file_ref!r}. "
+                        "Use 'F123', '123', or 'PHID-FILE-...'."
+                    ),
+                }
+            constraints = {"ids": [int(m.group(1))]}
+
+        search = client.file.search_files(constraints=constraints, limit=1)
+        data = search.get("data") or []
+        if not data:
+            return {"success": False, "error": f"File {file_ref} not found"}
+
+        record = data[0]
+        phid = record.get("phid")
+        fields = record.get("fields", {})
+        name = fields.get("name")
+        mime = fields.get("mimeType") or fields.get("mimetype") or ""
+        size = fields.get("byteSize") or fields.get("size") or 0
+        try:
+            size = int(size)
+        except (TypeError, ValueError):
+            size = 0
+
+        meta = {
+            "phid": phid,
+            "id": record.get("id"),
+            "name": name,
+            "mimeType": mime,
+            "byteSize": size,
+        }
+
+        # Refuse oversized payloads so a stray video cannot blow up context.
+        max_bytes = 10 * 1024 * 1024
+        if size and size > max_bytes:
+            return {
+                "success": False,
+                "error": (
+                    f"File is {size} bytes, over the {max_bytes}-byte limit; "
+                    "not downloaded."
+                ),
+                "file": meta,
+            }
+
+        if not mime.startswith("image/"):
+            return {
+                "success": True,
+                "is_image": False,
+                "note": (
+                    "Not an image; bytes not returned. Use the metadata or open "
+                    "it in Phorge."
+                ),
+                "file": meta,
+            }
+
+        if not phid:
+            return {
+                "success": False,
+                "error": "File record has no PHID to download",
+                "file": meta,
+            }
+
+        # file.download returns the base64 string itself (or {}/None on failure).
+        download = client.file.download_file(file_phid=phid)
+        if not isinstance(download, str) or not download:
+            return {
+                "success": False,
+                "error": "file.download returned no data",
+                "file": meta,
+            }
+
+        raw = base64.b64decode(download)
+
+        # The mimeType subtype is the FastMCP image format, e.g. image/png -> png.
+        fmt = ""
+        if "/" in mime:
+            fmt = mime.split("/", 1)[1].split(";")[0].strip()
+        if not fmt and name and "." in name:
+            fmt = name.rsplit(".", 1)[1].lower()
+        if fmt == "jpg":
+            fmt = "jpeg"
+        return Image(data=raw, format=fmt or "png")
+
+    @mcp.tool()
+    @handle_api_errors
+    def pha_task_relationships(task_id: str) -> dict:
+        """
+        Read a task's direct parent and subtask relationships, so a caller can
+        walk the task tree.
+
+        Args:
+            task_id: Task identifier: "T123" or "123".
+
+        Returns:
+            The task's direct parents and subtasks, each as id, title, status.
+        """
+        import re as _re
+
+        m = _re.match(r"^T?(\d+)$", str(task_id).strip(), _re.IGNORECASE)
+        if not m:
+            return {
+                "success": False,
+                "error": f"Unrecognized task id: {task_id!r}. Use 'T123' or '123'.",
+            }
+        tid = int(m.group(1))
+
+        client = get_client_func()
+
+        def _summarize(search_result: dict) -> List[dict]:
+            out = []
+            for task in search_result.get("data", []):
+                task_fields = task.get("fields", {})
+                status = task_fields.get("status") or {}
+                out.append(
+                    {
+                        "id": task.get("id"),
+                        "title": task_fields.get("name"),
+                        "status": (
+                            status.get("value")
+                            if isinstance(status, dict)
+                            else status
+                        ),
+                    }
+                )
+            return out
+
+        # parentIDs:[tid] returns this task's subtasks;
+        # subtaskIDs:[tid] returns this task's parents.
+        subtasks = client.maniphest.search_tasks(constraints={"parentIDs": [tid]})
+        parents = client.maniphest.search_tasks(constraints={"subtaskIDs": [tid]})
+
+        return {
+            "success": True,
+            "task_id": tid,
+            "parents": _summarize(parents),
+            "subtasks": _summarize(subtasks),
+        }
