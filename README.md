@@ -51,6 +51,9 @@ Phorge API token. Nothing is shared except the code.
 The server pins to the `main` branch via
 `git+https://your-git-host/<group>/conduit.git@main`.
 
+Using a different agent? See [docs/CLIENT_SETUP.md](docs/CLIENT_SETUP.md) for
+**Hermes** and **Pi** setup.
+
 ### From Source
 To install from source for development or contribution:
 
