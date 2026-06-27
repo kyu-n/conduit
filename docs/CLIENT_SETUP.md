@@ -18,7 +18,7 @@ This guide covers **Hermes** and **Pi**. For Claude Code, see the main
    server refuses to start otherwise.
 3. **The launch command and env**, used by every client below:
    - Command: `uvx`
-   - Args: `--from git+https://github.com/kyu-n/conduit.git@master conduit-mcp`
+   - Args: `--from git+https://github.com/kyu-n/conduit.git@main conduit-mcp`
      (for local dev you can instead point at `<clone>/.venv/bin/conduit-mcp`)
    - Env: `PHABRICATOR_URL=https://<your-phorge-host>/api/` and
      `PHABRICATOR_TOKEN=<your 32-char token>`
@@ -39,7 +39,7 @@ under `mcp_servers:`.
        command: uvx
        args:
          - "--from"
-         - "git+https://github.com/kyu-n/conduit.git@master"
+         - "git+https://github.com/kyu-n/conduit.git@main"
          - "conduit-mcp"
        env:
          PHABRICATOR_URL: "https://<your-phorge-host>/api/"
@@ -78,7 +78,7 @@ servers through a single proxy tool.
          "command": "uvx",
          "args": [
            "--from",
-           "git+https://github.com/kyu-n/conduit.git@master",
+           "git+https://github.com/kyu-n/conduit.git@main",
            "conduit-mcp"
          ],
          "env": {

@@ -5,7 +5,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/kyu-n/conduit.git@master",
+        "git+https://github.com/kyu-n/conduit.git@main",
         "conduit-mcp"
       ],
       "env": {
