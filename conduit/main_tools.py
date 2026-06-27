@@ -1731,13 +1731,19 @@ def register_tools(  # noqa: C901
         record = data[0]
         phid = record.get("phid")
         fields = record.get("fields", {})
-        name = fields.get("name")
+        name = fields.get("name") or ""
+        # Phorge's file.search omits mimeType, so detect images by extension and
+        # use mimeType only when a given instance does provide it.
         mime = fields.get("mimeType") or fields.get("mimetype") or ""
-        size = fields.get("byteSize") or fields.get("size") or 0
+        size = fields.get("size") or fields.get("byteSize") or 0
         try:
             size = int(size)
         except (TypeError, ValueError):
             size = 0
+
+        ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
+        image_exts = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+        is_image = mime.startswith("image/") or ext in image_exts
 
         meta = {
             "phid": phid,
@@ -1759,7 +1765,7 @@ def register_tools(  # noqa: C901
                 "file": meta,
             }
 
-        if not mime.startswith("image/"):
+        if not is_image:
             return {
                 "success": True,
                 "is_image": False,

@@ -70,6 +70,41 @@ class TestPhaFileDownload(unittest.TestCase):
             constraints={"phids": ["PHID-FILE-9"]}, limit=1
         )
 
+    def test_image_detected_by_extension_when_mime_absent(self):
+        # Phorge's file.search omits mimeType and uses 'size', not 'byteSize'.
+        png_b64 = base64.b64encode(b"\x89PNG real-ish").decode()
+        client = self._client(
+            [
+                {
+                    "phid": "PHID-FILE-5",
+                    "id": 5,
+                    "fields": {"name": "grafik.png", "size": 12},
+                }
+            ],
+            download=png_b64,
+        )
+        result = _tool_fn(client, "pha_file_download")("F5")
+        self.assertIsInstance(result, Image)
+        self.assertEqual(result._format, "png")
+        client.file.download_file.assert_called_once_with(file_phid="PHID-FILE-5")
+
+    def test_non_image_extension_when_mime_absent(self):
+        # A video with empty mime and a .mp4 name must not be treated as an image.
+        client = self._client(
+            [
+                {
+                    "phid": "PHID-FILE-6",
+                    "id": 6,
+                    "fields": {"name": "clip.mp4", "size": 5000},
+                }
+            ]
+        )
+        result = _tool_fn(client, "pha_file_download")("F6")
+        self.assertIsInstance(result, dict)
+        self.assertFalse(result["is_image"])
+        self.assertEqual(result["file"]["byteSize"], 5000)
+        client.file.download_file.assert_not_called()
+
     def test_non_image_returns_metadata_no_download(self):
         client = self._client(
             [
