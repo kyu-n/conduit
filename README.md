@@ -30,6 +30,27 @@ Then run:
 uvx --from git+https://github.com/mcpnow-io/conduit conduit-mcp
 ```
 
+### Team install (this fork)
+
+This fork adds two read tools (`pha_file_download`, `pha_task_relationships`)
+used by the `tackle` skill, on the `main` branch. It is a per-developer
+server: each developer runs their own copy and authenticates with their own
+Phorge API token. Nothing is shared except the code.
+
+1. Each developer generates a token at `Settings -> Conduit API Tokens` on the
+   Phorge instance and exports it:
+   ```bash
+   export PHABRICATOR_TOKEN=api-xxxxxxxxxxxxxxxxxxxxxxxxxxxx   # exactly 32 chars
+   ```
+2. Copy [`.mcp.json.example`](.mcp.json.example) to `.mcp.json` at the root of
+   the repo your team works in, replacing `<group>` with the real GitLab path.
+   Claude Code auto-discovers it and prompts each developer to approve the
+   server. The token is read from the environment via `${PHABRICATOR_TOKEN}`, so
+   no secrets are committed.
+
+The server pins to the `main` branch via
+`git+https://your-git-host/<group>/conduit.git@main`.
+
 ### From Source
 To install from source for development or contribution:
 

@@ -1,0 +1,17 @@
+{
+  "_comment": "Team template for the conduit (Phorge) MCP server. Copy to .mcp.json at the root of the repo your team works in (e.g. the team checkout). Claude Code auto-discovers it and prompts each developer to approve. No secrets live here: PHABRICATOR_TOKEN is expanded from each developer's own environment. Replace <group> with the real GitLab path before sharing.",
+  "mcpServers": {
+    "conduit": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://your-git-host/<group>/conduit.git@main",
+        "conduit-mcp"
+      ],
+      "env": {
+        "PHABRICATOR_URL": "https://your-phorge-host/api/",
+        "PHABRICATOR_TOKEN": "${PHABRICATOR_TOKEN}"
+      }
+    }
+  }
+}
