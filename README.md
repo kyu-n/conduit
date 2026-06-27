@@ -33,9 +33,10 @@ uvx --from git+https://github.com/kyu-n/conduit.git@main conduit-mcp
 ### Install from this fork
 
 This fork adds two read tools (`pha_file_download`, `pha_task_relationships`)
-used by the `tackle` skill, on the `main` branch. It is a per-developer
-server: each developer runs their own copy and authenticates with their own
-Phorge API token. Nothing is shared except the code.
+for fetching file attachments as viewable images and reading a task's
+parent/subtask tree, on the `main` branch. It is a per-developer server: each
+developer runs their own copy and authenticates with their own Phorge API
+token. Nothing is shared except the code.
 
 1. Each developer generates a token at `Settings -> Conduit API Tokens` on the
    Phorge instance and exports it:

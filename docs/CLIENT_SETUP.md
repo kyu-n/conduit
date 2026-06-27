@@ -103,9 +103,9 @@ servers through a single proxy tool.
    the proxy, add `"directTools": true` (or a list of tool names) to the server
    entry.
 
-Note: the `tackle` skill ships as a Claude Code skill and references tools as
-`mcp__conduit__*`. Under Pi the same tools are reached via the `mcp` proxy (or as
-`directTools`), so port the skill's prose accordingly if you want it in Pi.
+Note: Claude Code exposes these tools as `mcp__conduit__*`; under Pi they are
+reached via the `mcp` proxy (or as `directTools`), so adapt any tool-calling
+prose accordingly.
 
 ---
 
