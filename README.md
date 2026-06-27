@@ -27,7 +27,7 @@ After installation, restart your shell or terminal to apply the environment vari
 
 Then run:
 ```bash
-uvx --from git+https://github.com/mcpnow-io/conduit conduit-mcp
+uvx --from git+https://github.com/kyu-n/conduit.git@main conduit-mcp
 ```
 
 ### Install from this fork
@@ -59,7 +59,7 @@ To install from source for development or contribution:
 
 ```bash
 # Clone the repository
-git clone https://github.com/mcpnow-io/conduit.git
+git clone https://github.com/kyu-n/conduit.git
 cd conduit
 
 # Install in development mode with all dependencies
@@ -99,20 +99,14 @@ Do note that in HTTPS/SSE mode, `PHABRICATOR_TOKEN` is NOT needed.
 
 ### Getting Your API Token
 1. Log into your Phabricator instance
-2. Go to Settings > API Tokens
+2. Go to Settings > Conduit API Tokens
 3. Generate a new token
 4. Copy the 32-character token and use it as `PHABRICATOR_TOKEN`
 
 ## Contributing
-There are many ways in which you can participate in this project, for example:
-* Submit [bugs and feature requests](https://github.com/mcpnow-io/conduit/issues), and help us verify as they are checked in
-* Review [source code changes](https://github.com/mcpnow-io/conduit/pulls)
-* Review the [wiki](https://github.com/mcpnow-io/conduit/wiki) and make pull requests for anything from typos to additional and new content
-
-If you are interested in fixing issues and contributing directly to the code base, please see the document [How to Contribute](https://github.com/mcpnow-io/conduit/wiki/How-to-Contribute)：
-* [First-Time Setup](https://github.com/mcpnow-io/conduit/wiki/How-to-Contribute#first-time-setup)
-* [Submitting a Pull Request](https://github.com/mcpnow-io/conduit/wiki/How-to-Contribute#submitting-a-pull-request)
-* [Running Unittests](https://github.com/mcpnow-io/conduit/wiki/How-to-Contribute#running-unittests)
+This is a fork maintained at [github.com/kyu-n/conduit](https://github.com/kyu-n/conduit);
+file issues and pull requests there. After `pip install -e .[dev]`, run the tests
+with `pytest`.
 
 ## License
 Copyright (c) 2025 mpcnow.io. all rights reserved.
