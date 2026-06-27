@@ -71,7 +71,8 @@ class TestFileClient:
         mock_request.assert_called_once_with(
             "file.search",
             {
-                "constraints": {"phids": ["PHID-FILE-1"]},
+                "limit": 1,
+                "constraints[phids][0]": "PHID-FILE-1",
             },
         )
         assert result["name"] == "test.txt"

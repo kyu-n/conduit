@@ -34,7 +34,7 @@ class FileClient(BasePhabricatorClient):
         Returns:
             File information
         """
-        params = {"constraints": {"phids": [file_phid]}}
+        params = build_search_params(constraints={"phids": [file_phid]}, limit=1)
 
         result = self._make_request("file.search", params)
 
