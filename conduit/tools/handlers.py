@@ -55,7 +55,7 @@ def _get_error_details(error: Exception) -> Dict[str, Any]:
     # Provide generic suggestions based on error type
     suggestions = {
         ErrorCode.NETWORK_ERROR: "Check your network connection and verify the Phabricator server is accessible",
-        ErrorCode.AUTH_ERROR: "Verify your PHABRICATOR_TOKEN environment variable or check token validity",
+        ErrorCode.AUTH_ERROR: "Verify your token (PHABRICATOR_TOKEN env var or X-Phabricator-Token header); it may be invalid or revoked",
         ErrorCode.VALIDATION_ERROR: "Provide valid parameters according to the API documentation",
         ErrorCode.RATE_LIMIT_ERROR: "Wait a few minutes before making additional requests",
         ErrorCode.NOT_FOUND: "Verify the resource identifier and check if it exists",

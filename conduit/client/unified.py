@@ -370,8 +370,17 @@ class PhabricatorClient(object):
         max_retries: int = 3,
         enable_cache: bool = True,
         user_agent: Optional[str] = None,
+        http_client: Optional[httpx.Client] = None,
         **kwargs,
     ):
+        # Shared-pool path: caller owns the http_client lifecycle.
+        if http_client is not None:
+            self.http_client = http_client
+            self._owns_client = False
+            self._is_enhanced = False
+            self._build_sub_clients(api_url, api_token)
+            return
+
         # Use enhanced client if advanced features are requested
         if (
             timeout != 30.0
@@ -405,7 +414,10 @@ class PhabricatorClient(object):
             )
             self._is_enhanced = False
 
-        # Initialize client modules (same as before)
+        self._owns_client = True
+        self._build_sub_clients(api_url, api_token)
+
+    def _build_sub_clients(self, api_url: str, api_token: str):
         self.maniphest = ManiphestClient(api_url, api_token, self.http_client)
         self.differential = DifferentialClient(api_url, api_token, self.http_client)
         self.diffusion = DiffusionClient(api_url, api_token, self.http_client)
@@ -433,7 +445,7 @@ class PhabricatorClient(object):
             self._enhanced_client.clear_cache()
 
     def close(self):
-        if self.http_client:
+        if self._owns_client and self.http_client:
             self.http_client.close()
 
     def __enter__(self):
