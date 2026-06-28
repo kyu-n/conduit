@@ -413,7 +413,8 @@ def register_tools(  # noqa: C901
             task_phid=task_phid, limit=limit
         )
 
-        return {"success": True, "transactions": result}
+        has_more = (result.get("cursor") or {}).get("after") is not None
+        return {"success": True, "transactions": result, "has_more": has_more}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
@@ -422,6 +423,7 @@ def register_tools(  # noqa: C901
         include_projects: bool = True,
         include_subscribers: bool = False,
         limit: int = 50,
+        include_description: bool = True,
     ) -> dict:
         """
         Get personal tasks assigned to or authored by the current user.
@@ -431,6 +433,9 @@ def register_tools(  # noqa: C901
             include_projects: Include project information in results
             include_subscribers: Include subscriber information in results
             limit: Maximum number of results to return
+            include_description: Include task description in results (default: True). Set to False
+                to omit fields.description from each task, reducing payload size by ~70-90% for
+                typical tasks. Use when only metadata (id, title, status, priority) is needed.
 
         Returns:
             Personal tasks based on the specified type
@@ -447,11 +452,17 @@ def register_tools(  # noqa: C901
             result = client.maniphest.search_assigned_tasks(
                 attachments=attachments if attachments else None, limit=limit
             )
+            if not include_description:
+                for task in result.get("data", []):
+                    task.get("fields", {}).pop("description", None)
             return {"success": True, "assigned_tasks": result}
         elif task_type == "authored":
             result = client.maniphest.search_authored_tasks(
                 attachments=attachments if attachments else None, limit=limit
             )
+            if not include_description:
+                for task in result.get("data", []):
+                    task.get("fields", {}).pop("description", None)
             return {"success": True, "authored_tasks": result}
         else:
             return {
@@ -1639,6 +1650,7 @@ def register_tools(  # noqa: C901
     def pha_workboard_search_tasks_by_column(
         column_phid: str,
         limit: int = 100,
+        include_description: bool = True,
     ) -> dict:
         """
         Search for tasks in a specific workboard column.
@@ -1646,6 +1658,9 @@ def register_tools(  # noqa: C901
         Args:
             column_phid: Column PHID to search tasks in
             limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
+            include_description: Include task description in results (default: True). Set to False
+                to omit fields.description from each task, reducing payload size by ~70-90% for
+                typical tasks. Use when only metadata (id, title, status, priority) is needed.
 
         Returns:
             Search results with task data and pagination metadata
@@ -1661,6 +1676,10 @@ def register_tools(  # noqa: C901
             constraints=constraints,
             limit=limit,
         )
+
+        if not include_description:
+            for task in result.get("data", []):
+                task.get("fields", {}).pop("description", None)
 
         # Add pagination metadata
         result = _add_pagination_metadata(result, result.get("cursor"))
@@ -1847,12 +1866,18 @@ def register_tools(  # noqa: C901
 
         # parentIDs:[tid] returns this task's subtasks;
         # subtaskIDs:[tid] returns this task's parents.
-        subtasks = client.maniphest.search_tasks(constraints={"parentIDs": [tid]})
-        parents = client.maniphest.search_tasks(constraints={"subtaskIDs": [tid]})
+        subtasks_raw = client.maniphest.search_tasks(constraints={"parentIDs": [tid]})
+        parents_raw = client.maniphest.search_tasks(constraints={"subtaskIDs": [tid]})
+
+        has_more = (
+            (subtasks_raw.get("cursor") or {}).get("after") is not None
+            or (parents_raw.get("cursor") or {}).get("after") is not None
+        )
 
         return {
             "success": True,
             "task_id": tid,
-            "parents": _summarize(parents),
-            "subtasks": _summarize(subtasks),
+            "parents": _summarize(parents_raw),
+            "subtasks": _summarize(subtasks_raw),
+            "has_more": has_more,
         }

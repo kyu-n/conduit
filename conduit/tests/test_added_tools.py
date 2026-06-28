@@ -618,5 +618,185 @@ class TestHandleApiErrorsToolResult(unittest.TestCase):
         self.assertIn("nope", result.structured_content["error"])
 
 
+class TestPhaTaskGetPersonalIncludeDescription(unittest.TestCase):
+    """C4: include_description strips fields.description when False."""
+
+    def _make_result(self, desc="some description"):
+        return {
+            "data": [
+                {"id": 1, "fields": {"name": "Task A", "description": {"raw": desc}}},
+                {"id": 2, "fields": {"name": "Task B", "description": {"raw": desc}}},
+            ],
+            "cursor": {"after": None},
+        }
+
+    def _client(self, result):
+        client = Mock()
+        client.maniphest.search_assigned_tasks.return_value = result
+        client.maniphest.search_authored_tasks.return_value = result
+        return client
+
+    def test_assigned_description_stripped_when_false(self):
+        client = self._client(self._make_result())
+        fn = _tool_fn(client, "pha_task_get_personal")
+        result = fn(task_type="assigned", include_description=False)
+        self.assertTrue(result["success"])
+        for task in result["assigned_tasks"]["data"]:
+            self.assertNotIn("description", task["fields"])
+
+    def test_assigned_description_kept_when_true(self):
+        client = self._client(self._make_result())
+        fn = _tool_fn(client, "pha_task_get_personal")
+        result = fn(task_type="assigned", include_description=True)
+        self.assertTrue(result["success"])
+        for task in result["assigned_tasks"]["data"]:
+            self.assertIn("description", task["fields"])
+
+    def test_authored_description_stripped_when_false(self):
+        client = self._client(self._make_result())
+        fn = _tool_fn(client, "pha_task_get_personal")
+        result = fn(task_type="authored", include_description=False)
+        self.assertTrue(result["success"])
+        for task in result["authored_tasks"]["data"]:
+            self.assertNotIn("description", task["fields"])
+
+    def test_authored_description_kept_when_true(self):
+        client = self._client(self._make_result())
+        fn = _tool_fn(client, "pha_task_get_personal")
+        result = fn(task_type="authored", include_description=True)
+        self.assertTrue(result["success"])
+        for task in result["authored_tasks"]["data"]:
+            self.assertIn("description", task["fields"])
+
+
+class TestPhaWorkboardSearchTasksByColumnIncludeDescription(unittest.TestCase):
+    """C4: include_description strips fields.description when False."""
+
+    def _make_result(self, desc="workboard desc"):
+        return {
+            "data": [
+                {"id": 10, "fields": {"name": "Col Task A", "description": {"raw": desc}}},
+            ],
+            "cursor": {"after": None},
+        }
+
+    def _client(self, result):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = result
+        return client
+
+    def test_description_stripped_when_false(self):
+        client = self._client(self._make_result())
+        fn = _tool_fn(client, "pha_workboard_search_tasks_by_column")
+        result = fn(column_phid="PHID-PCOL-abc", include_description=False)
+        self.assertTrue(result["success"])
+        for task in result["tasks"]["data"]:
+            self.assertNotIn("description", task["fields"])
+
+    def test_description_kept_when_true(self):
+        client = self._client(self._make_result())
+        fn = _tool_fn(client, "pha_workboard_search_tasks_by_column")
+        result = fn(column_phid="PHID-PCOL-abc", include_description=True)
+        self.assertTrue(result["success"])
+        for task in result["tasks"]["data"]:
+            self.assertIn("description", task["fields"])
+
+
+class TestPhaTaskGetTransactionsHasMore(unittest.TestCase):
+    """C5: has_more reflects whether cursor.after is set on transactions."""
+
+    def _client_with_cursor(self, after_value):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"phid": "PHID-TASK-1"}],
+        }
+        client.maniphest.search_task_transactions.return_value = {
+            "data": [{"id": 1}],
+            "cursor": {"after": after_value},
+        }
+        return client
+
+    def test_has_more_true_when_cursor_after_set(self):
+        client = self._client_with_cursor("PAGE2")
+        fn = _tool_fn(client, "pha_task_get_transactions")
+        result = fn(task_id="PHID-TASK-1")
+        self.assertTrue(result["success"])
+        self.assertIn("has_more", result)
+        self.assertTrue(result["has_more"])
+
+    def test_has_more_false_when_cursor_after_none(self):
+        client = self._client_with_cursor(None)
+        fn = _tool_fn(client, "pha_task_get_transactions")
+        result = fn(task_id="PHID-TASK-1")
+        self.assertTrue(result["success"])
+        self.assertIn("has_more", result)
+        self.assertFalse(result["has_more"])
+
+    def test_has_more_false_when_no_cursor_key(self):
+        client = Mock()
+        client.maniphest.search_task_transactions.return_value = {"data": [{"id": 1}]}
+        fn = _tool_fn(client, "pha_task_get_transactions")
+        result = fn(task_id="PHID-TASK-1")
+        self.assertIn("has_more", result)
+        self.assertFalse(result["has_more"])
+
+
+class TestPhaTaskRelationshipsHasMore(unittest.TestCase):
+    """C5: has_more is True if either subtasks or parents search was truncated."""
+
+    def _search_side_effect(self, subtask_cursor=None, parent_cursor=None):
+        def search(constraints=None, **kwargs):
+            if constraints and "parentIDs" in constraints:
+                return {"data": [], "cursor": {"after": subtask_cursor}}
+            if constraints and "subtaskIDs" in constraints:
+                return {"data": [], "cursor": {"after": parent_cursor}}
+            return {"data": []}
+        return search
+
+    def test_has_more_false_when_no_truncation(self):
+        client = Mock()
+        client.maniphest.search_tasks.side_effect = self._search_side_effect(
+            subtask_cursor=None, parent_cursor=None
+        )
+        result = _tool_fn(client, "pha_task_relationships")("T100")
+        self.assertTrue(result["success"])
+        self.assertIn("has_more", result)
+        self.assertFalse(result["has_more"])
+
+    def test_has_more_true_when_subtasks_truncated(self):
+        client = Mock()
+        client.maniphest.search_tasks.side_effect = self._search_side_effect(
+            subtask_cursor="SPAGE2", parent_cursor=None
+        )
+        result = _tool_fn(client, "pha_task_relationships")("T100")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["has_more"])
+
+    def test_has_more_true_when_parents_truncated(self):
+        client = Mock()
+        client.maniphest.search_tasks.side_effect = self._search_side_effect(
+            subtask_cursor=None, parent_cursor="PPAGE2"
+        )
+        result = _tool_fn(client, "pha_task_relationships")("T100")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["has_more"])
+
+    def test_has_more_true_when_both_truncated(self):
+        client = Mock()
+        client.maniphest.search_tasks.side_effect = self._search_side_effect(
+            subtask_cursor="S2", parent_cursor="P2"
+        )
+        result = _tool_fn(client, "pha_task_relationships")("T100")
+        self.assertTrue(result["success"])
+        self.assertTrue(result["has_more"])
+
+    def test_has_more_false_when_no_cursor_key(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {"data": []}
+        result = _tool_fn(client, "pha_task_relationships")("T100")
+        self.assertIn("has_more", result)
+        self.assertFalse(result["has_more"])
+
+
 if __name__ == "__main__":
     unittest.main()
