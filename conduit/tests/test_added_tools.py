@@ -230,7 +230,8 @@ class TestPhaTaskRelationships(unittest.TestCase):
     def test_unrecognized_id(self):
         client = Mock()
         result = _tool_fn(client, "pha_task_relationships")("garbage")
-        self.assertFalse(result["success"])
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
         client.maniphest.search_tasks.assert_not_called()
 
 
@@ -305,7 +306,8 @@ class TestPhaTaskGet(unittest.TestCase):
     def test_rejects_phid_and_garbage(self):
         client = Mock()
         result = _tool_fn(client, "pha_task_get")("PHID-TASK-abc")
-        self.assertFalse(result["success"])
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
         client.maniphest.get_task.assert_not_called()
 
 
@@ -341,9 +343,10 @@ class TestErrorClassification(unittest.TestCase):
             raise RuntimeError("kaboom")
 
         result = boom()
-        self.assertFalse(result["success"])
-        self.assertNotIn("Parameter validation failed", result["error"])
-        self.assertIn("kaboom", result["error"])
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
+        self.assertNotIn("Parameter validation failed", result.structured_content["error"])
+        self.assertIn("kaboom", result.structured_content["error"])
 
 
 class TestBaseHttpErrorCodes(unittest.TestCase):
@@ -391,8 +394,9 @@ class TestHandleApiErrorsLogging(unittest.TestCase):
         with self.assertLogs("conduit", level="WARNING") as cm:
             result = boom()
 
-        self.assertFalse(result["success"])
-        self.assertIn("boom", result["error"])
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
+        self.assertIn("boom", result.structured_content["error"])
         self.assertTrue(
             any("boom" in msg for msg in cm.output),
             f"Expected 'boom' in log output, got: {cm.output}",
@@ -577,6 +581,41 @@ class TestPhaUserSearchPagination(unittest.TestCase):
         self._fn(client)(after="USERPAGE2", limit=5)
         _call = client.user.search.call_args
         self.assertEqual(_call.kwargs.get("after"), "USERPAGE2")
+
+
+class TestHandleApiErrorsToolResult(unittest.TestCase):
+    """handle_api_errors wraps all failure paths as ToolResult(is_error=True)."""
+
+    def _decorator(self):
+        from conduit.tools.handlers import handle_api_errors
+        from fastmcp.tools.base import ToolResult
+        return handle_api_errors, ToolResult
+
+    def test_raised_exception_produces_tool_result(self):
+        handle_api_errors, ToolResult = self._decorator()
+
+        @handle_api_errors
+        def boom():
+            raise RuntimeError("boom")
+
+        result = boom()
+        self.assertIsInstance(result, ToolResult)
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
+        self.assertIn("boom", result.structured_content["error"])
+
+    def test_returned_failure_dict_produces_tool_result(self):
+        handle_api_errors, ToolResult = self._decorator()
+
+        @handle_api_errors
+        def nope():
+            return {"success": False, "error": "nope"}
+
+        result = nope()
+        self.assertIsInstance(result, ToolResult)
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
+        self.assertIn("nope", result.structured_content["error"])
 
 
 if __name__ == "__main__":

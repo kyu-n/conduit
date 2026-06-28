@@ -2,6 +2,8 @@ import logging
 from functools import wraps
 from typing import Any, Callable, Dict
 
+from fastmcp.tools.base import ToolResult
+
 from conduit.client import PhabricatorAPIError
 from conduit.utils import ErrorCode
 
@@ -74,11 +76,10 @@ def handle_api_errors(func: Callable) -> Callable:
     """
     Decorator to handle API errors and provide detailed error information.
 
-    This decorator wraps API functions to catch exceptions and return
-    structured error responses with error codes and suggestions.
-
-    The decorator maintains backward compatibility by preserving the original
-    error response structure while adding optional enhanced fields.
+    On success, returns the tool's value unchanged. On failure (raised exception
+    or tool returning {"success": False, ...}), returns a FastMCP ToolResult
+    with is_error=True; the structured_content carries the error body including
+    success, error message, error_code, suggestion, and optional error_info fields.
 
     Args:
         func: The function to decorate
@@ -92,48 +93,62 @@ def handle_api_errors(func: Callable) -> Callable:
             # API call logic here
             pass
 
-        # Success response:
+        # Success: returns tool result unchanged
         # {"success": True, "result": {...}}
 
-        # Error response:
-        # {
+        # Error: returns ToolResult(is_error=True) with structured_content
+        # ToolResult(is_error=True, structured_content={
         #     "success": False,
         #     "error": "Authentication failed: Invalid API token",
         #     "error_code": "AUTH_ERROR",
         #     "suggestion": "Verify your PHABRICATOR_TOKEN environment variable"
-        # }
+        # })
     """
 
     @wraps(func)
-    def wrapper(*args, **kwargs) -> Dict[str, Any]:
+    def wrapper(*args, **kwargs) -> Any:
         try:
             result = func(*args, **kwargs)
-            # If the function returns a dict with 'success' key, return as-is
-            # Otherwise, wrap the result in a success response
+            if isinstance(result, ToolResult):
+                return result
             if isinstance(result, dict) and "success" in result:
+                if result.get("success") is False:
+                    return ToolResult(
+                        content=str(result.get("error", "tool failed")),
+                        structured_content=result,
+                        is_error=True,
+                    )
                 return result
             return {"success": True, "result": result}
         except PhabricatorAPIError as e:
             logging.getLogger("conduit").warning("tool %s failed: %s", func.__name__, e)
             error_details = _get_error_details(e)
-            response = {
+            body: Dict[str, Any] = {
                 "success": False,
                 "error": error_details["error"],
                 "error_code": error_details["error_code"],
                 "suggestion": error_details["suggestion"],
             }
-            # Maintain backward compatibility by keeping the original error message
             if hasattr(e, "error_info") and e.error_info:
-                response["error_info"] = e.error_info
-            return response
+                body["error_info"] = e.error_info
+            return ToolResult(
+                content=str(body["error"]),
+                structured_content=body,
+                is_error=True,
+            )
         except Exception as e:
             logging.getLogger("conduit").warning("tool %s failed: %s", func.__name__, e)
             error_details = _get_error_details(e)
-            return {
+            body = {
                 "success": False,
                 "error": error_details["error"],
                 "error_code": error_details["error_code"],
                 "suggestion": error_details["suggestion"],
             }
+            return ToolResult(
+                content=str(body["error"]),
+                structured_content=body,
+                is_error=True,
+            )
 
     return wrapper

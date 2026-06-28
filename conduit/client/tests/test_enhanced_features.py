@@ -52,9 +52,10 @@ class TestNewFeatures(unittest.TestCase):
 
         # Test error handling
         result = test_function(success=False)
-        self.assertEqual(result["success"], False)
-        self.assertEqual(result["error"], "Test error")
-        self.assertEqual(result["error_code"], "VALIDATION_ERROR")
+        self.assertIs(result.is_error, True)
+        self.assertFalse(result.structured_content["success"])
+        self.assertEqual(result.structured_content["error"], "Test error")
+        self.assertEqual(result.structured_content["error_code"], "VALIDATION_ERROR")
 
     def test_enhanced_client_configuration(self):
         """Test EnhancedPhabricatorClient configuration."""
@@ -221,8 +222,8 @@ class TestFeatureIntegration(unittest.TestCase):
 
         # Test with invalid data
         result = test_function_with_types("invalid")
-        self.assertEqual(result["success"], False)
-        self.assertEqual(result["error_code"], "VALIDATION_ERROR")
+        self.assertIs(result.is_error, True)
+        self.assertEqual(result.structured_content["error_code"], "VALIDATION_ERROR")
 
     def test_client_configuration_combinations(self):
         """Test different client configuration combinations."""
