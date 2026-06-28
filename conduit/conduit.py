@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
@@ -97,7 +98,7 @@ class ConduitApp:
 
     def run_sse_mode(self, host: str, port: int):
         """Run the application in SSE mode."""
-        print(f"Starting in HTTP/SSE mode on {host}:{port}")
+        print(f"Starting in HTTP/SSE mode on {host}:{port}", file=sys.stderr)
         self.mcp.run(
             transport="sse",
             host=host,
@@ -107,7 +108,7 @@ class ConduitApp:
 
     def run_stdio_mode(self):
         """Run the application in stdio mode."""
-        print("Starting in stdio mode")
+        print("Starting in stdio mode", file=sys.stderr)
         self.mcp.run(transport="stdio")
 
 
@@ -117,14 +118,15 @@ _app = None
 
 def print_server_info(config):
     """Print server configuration information."""
-    print("Starting Conduit MCP Server...")
-    print(f"Phabricator URL: {config.url}")
-    print(f"Token configured: {'Yes' if config.token else 'No'}")
-    print(f"Proxy configured: {'Yes' if config.proxy else 'No'}")
+    print("Starting Conduit MCP Server...", file=sys.stderr)
+    print(f"Phabricator URL: {config.url}", file=sys.stderr)
+    print(f"Token configured: {'Yes' if config.token else 'No'}", file=sys.stderr)
+    print(f"Proxy configured: {'Yes' if config.proxy else 'No'}", file=sys.stderr)
     if config.proxy:
-        print(f"Proxy URL: {config.proxy}")
+        print(f"Proxy URL: {config.proxy}", file=sys.stderr)
     print(
-        f"SSL certificate verification: {'Disabled' if config.disable_cert_verify else 'Enabled'}"
+        f"SSL certificate verification: {'Disabled' if config.disable_cert_verify else 'Enabled'}",
+        file=sys.stderr
     )
 
 
@@ -164,9 +166,10 @@ def main():
         print_server_info(config)
 
         print(
-            "Note: In HTTP/SSE mode, PHABRICATOR_TOKEN should be provided via HTTP headers:"
+            "Note: In HTTP/SSE mode, PHABRICATOR_TOKEN should be provided via HTTP headers:",
+            file=sys.stderr
         )
-        print("  - X-PHABRICATOR-TOKEN: <token>")
+        print("  - X-PHABRICATOR-TOKEN: <token>", file=sys.stderr)
     else:
         config = PhabricatorConfig(require_token=True)
         print_server_info(config)
