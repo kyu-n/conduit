@@ -36,16 +36,17 @@ def _truncate_text_response(text: str, max_length: int = 2000) -> dict:
     Returns:
         Truncated response with guidance
     """
-    if len(text) <= max_length:
-        return {"content": text, "truncated": False}
+    original_length = len(text)
+    if original_length <= max_length:
+        return {"content": text, "truncated": False, "original_length": original_length}
 
     truncated_text = text[:max_length]
-    remaining_length = len(text) - max_length
+    remaining_length = original_length - max_length
 
     return {
         "content": truncated_text,
         "truncated": True,
-        "original_length": len(text),
+        "original_length": original_length,
         "remaining_length": remaining_length,
         "suggestion": f"Content was truncated. {remaining_length} characters remaining. Use specific search parameters to reduce results.",
     }
@@ -373,12 +374,13 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    def pha_task_get_transactions(task_id: str) -> dict:
+    def pha_task_get_transactions(task_id: str, limit: int = 100) -> dict:
         """
         Get transaction history for a Phabricator task, including comments.
 
         Args:
             task_id: The numeric ID or PHID of the task to retrieve transactions for (e.g., "1234" or "PHID-TASK-xxx")
+            limit: Maximum number of transactions to return (default: 100)
 
         Returns:
             Transaction history with all changes and comments for the task
@@ -403,7 +405,7 @@ def register_tools(  # noqa: C901
 
         # Use modern transaction.search API
         result = client.maniphest.search_task_transactions(
-            task_phid=task_phid, limit=100
+            task_phid=task_phid, limit=limit
         )
 
         return {"success": True, "transactions": result}
@@ -871,8 +873,15 @@ def register_tools(  # noqa: C901
                 # If decoding fails, keep original content
                 file_content = download_result
 
-        # Combine metadata with actual decoded content
-        return {"success": True, "file_content": file_content, "metadata": file_info}
+        # Combine metadata with actual decoded content, capping large files
+        trunc = _truncate_text_response(file_content, max_length=50000)
+        return {
+            "success": True,
+            "file_content": trunc["content"],
+            "truncated": trunc["truncated"],
+            "original_length": trunc["original_length"],
+            "metadata": file_info,
+        }
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
@@ -1257,7 +1266,13 @@ def register_tools(  # noqa: C901
 
         result = client.differential.get_raw_diff(diff_id=numeric_diff_id)
 
-        return {"success": True, "diff_content": result}
+        trunc = _truncate_text_response(result, max_length=50000)
+        return {
+            "success": True,
+            "diff_content": trunc["content"],
+            "truncated": trunc["truncated"],
+            "original_length": trunc["original_length"],
+        }
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
@@ -1279,7 +1294,13 @@ def register_tools(  # noqa: C901
 
         result = client.differential.get_commit_message(revision_id=int(revision_id))
 
-        return {"success": True, "commit_message": result}
+        trunc = _truncate_text_response(result, max_length=50000)
+        return {
+            "success": True,
+            "commit_message": trunc["content"],
+            "truncated": trunc["truncated"],
+            "original_length": trunc["original_length"],
+        }
 
     # Project API Tools
 

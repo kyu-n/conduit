@@ -434,5 +434,78 @@ class TestToolAnnotations(unittest.TestCase):
             )
 
 
+class TestTextPayloadCapping(unittest.TestCase):
+    """Part 2: content tools must cap responses at 50000 chars and report truncation."""
+
+    BIG = "x" * 60000
+
+    def test_repository_file_content_caps_large_content(self):
+        client = Mock()
+        client.diffusion.file_content_query.return_value = {"filePHID": "PHID-FILE-1"}
+        # Return a base64-encoded big string so the decode path yields BIG.
+        import base64
+        client.file.download_file.return_value = base64.b64encode(self.BIG.encode()).decode()
+        result = _tool_fn(client, "pha_repository_file_content")("REPO", "path/to/file.py")
+        self.assertTrue(result["success"])
+        self.assertLessEqual(len(result["file_content"]), 50000)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["original_length"], len(self.BIG))
+
+    def test_repository_file_content_not_truncated_when_short(self):
+        client = Mock()
+        client.diffusion.file_content_query.return_value = {"filePHID": "PHID-FILE-2"}
+        import base64
+        short = "hello world"
+        client.file.download_file.return_value = base64.b64encode(short.encode()).decode()
+        result = _tool_fn(client, "pha_repository_file_content")("REPO", "small.py")
+        self.assertTrue(result["success"])
+        self.assertFalse(result["truncated"])
+        self.assertEqual(result["original_length"], len(short))
+        self.assertEqual(result["file_content"], short)
+
+    def test_diff_get_content_caps_large_diff(self):
+        client = Mock()
+        client.differential.search_diffs.return_value = {
+            "data": [{"id": 42, "phid": "PHID-DIFF-abc"}]
+        }
+        client.differential.get_raw_diff.return_value = self.BIG
+        result = _tool_fn(client, "pha_diff_get_content")("PHID-DIFF-abc")
+        self.assertTrue(result["success"])
+        self.assertLessEqual(len(result["diff_content"]), 50000)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["original_length"], len(self.BIG))
+
+    def test_diff_get_content_not_truncated_when_short(self):
+        client = Mock()
+        client.differential.search_diffs.return_value = {
+            "data": [{"id": 7, "phid": "PHID-DIFF-xyz"}]
+        }
+        short_diff = "--- a\n+++ b\n@@ -1 +1 @@\n+line\n"
+        client.differential.get_raw_diff.return_value = short_diff
+        result = _tool_fn(client, "pha_diff_get_content")("PHID-DIFF-xyz")
+        self.assertTrue(result["success"])
+        self.assertFalse(result["truncated"])
+        self.assertEqual(result["diff_content"], short_diff)
+
+    def test_diff_get_commit_message_caps_large_message(self):
+        client = Mock()
+        client.differential.get_commit_message.return_value = self.BIG
+        result = _tool_fn(client, "pha_diff_get_commit_message")("D123")
+        self.assertTrue(result["success"])
+        self.assertLessEqual(len(result["commit_message"]), 50000)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["original_length"], len(self.BIG))
+
+    def test_diff_get_commit_message_not_truncated_when_short(self):
+        client = Mock()
+        short_msg = "feat: add widget\n\nFixes T999."
+        client.differential.get_commit_message.return_value = short_msg
+        result = _tool_fn(client, "pha_diff_get_commit_message")("D7")
+        self.assertTrue(result["success"])
+        self.assertFalse(result["truncated"])
+        self.assertEqual(result["commit_message"], short_msg)
+        self.assertEqual(result["original_length"], len(short_msg))
+
+
 if __name__ == "__main__":
     unittest.main()
