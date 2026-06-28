@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from conduit.client.base import BasePhabricatorClient
 from conduit.utils import build_search_params, build_transaction_params
@@ -6,7 +6,7 @@ from conduit.utils import build_search_params, build_transaction_params
 
 class DiffusionClient(BasePhabricatorClient):
     def search_repositories(
-        self, constraints: Dict[str, Any] = None, limit: int = 100
+        self, constraints: Dict[str, Any] = None, limit: int = 100, after: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Read information about repositories.
@@ -14,6 +14,7 @@ class DiffusionClient(BasePhabricatorClient):
         Args:
             constraints: Search constraints
             limit: Maximum number of results to return
+            after: Opaque cursor from a prior call's cursor.after; pass to fetch the next page
 
         Returns:
             Repository search results
@@ -21,6 +22,7 @@ class DiffusionClient(BasePhabricatorClient):
         params = build_search_params(
             constraints=constraints,
             limit=limit,
+            after=after,
         )
         return self._make_request("diffusion.repository.search", params)
 

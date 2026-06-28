@@ -88,7 +88,7 @@ def _sniff_image_format(data: bytes) -> str:
     return ""
 
 
-def _paginate_search(do_request, *, limit, after, fetch_all, page_cap=25):
+def _paginate_search(do_request, *, after, fetch_all, page_cap=25):
     """Run a search, optionally looping the cursor server-side until exhausted.
 
     do_request(after) -> raw client search result dict (keys "data", "cursor").
@@ -286,7 +286,7 @@ def register_tools(  # noqa: C901
                 limit=limit,
                 after=after_cur,
             )
-        data, meta = _paginate_search(_do, limit=limit, after=after, fetch_all=fetch_all)
+        data, meta = _paginate_search(_do, after=after, fetch_all=fetch_all)
         return {"success": True, "users": data, **meta}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
@@ -744,7 +744,7 @@ def register_tools(  # noqa: C901
                 limit=limit,
                 after=after_cur,
             )
-        data, meta = _paginate_search(_do, limit=limit, after=after, fetch_all=fetch_all)
+        data, meta = _paginate_search(_do, after=after, fetch_all=fetch_all)
         if not include_description:
             for task in data:
                 task.get("fields", {}).pop("description", None)
@@ -757,13 +757,19 @@ def register_tools(  # noqa: C901
     def pha_repository_search(
         constraints: Dict[str, Any] = None,
         limit: int = 50,
+        after: str = None,
+        fetch_all: bool = False,
     ) -> dict:
         """
         Search for repositories in Phabricator.
+        A single call returns at most ~100 results and is NOT exhaustive; for
+        'all/every' queries pass fetch_all=True.
 
         Args:
             constraints: Dict of repository.search constraints. Common keys: ids (list[int]), phids (list[str]), callsigns (list[str]), shortNames (list[str]), types (list[str], e.g. ["git"]), status ("open"|"closed"), query (str fulltext).
             limit: Maximum number of results to return. Default: 50. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
+            after: Opaque cursor from a prior call's next_cursor; pass to fetch the next page.
+            fetch_all: When True, loops the cursor server-side (up to a 25-page safety cap) to return all matching results in one call. Default: False.
 
         Returns:
             Repository search results with data list and pagination metadata
@@ -773,14 +779,15 @@ def register_tools(  # noqa: C901
         if constraints is None:
             constraints = {}
 
-        result = client.diffusion.search_repositories(
-            constraints=constraints if constraints else None, limit=limit
-        )
+        def _do(after_cur):
+            return client.diffusion.search_repositories(
+                constraints=constraints if constraints else None,
+                limit=limit,
+                after=after_cur,
+            )
 
-        # Add pagination metadata
-        result = _add_pagination_metadata(result, result.get("cursor"))
-
-        return {"success": True, "repositories": result}
+        data, meta = _paginate_search(_do, after=after, fetch_all=fetch_all)
+        return {"success": True, "repositories": data, **meta}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
@@ -1155,9 +1162,13 @@ def register_tools(  # noqa: C901
         repository: str = "",
         title_contains: str = "",
         limit: int = 50,
+        after: str = None,
+        fetch_all: bool = False,
     ) -> dict:
         """
         Search for code reviews (Differential revisions).
+        A single call returns at most ~100 results and is NOT exhaustive; for
+        'all/every' queries pass fetch_all=True.
 
         Args:
             author: Filter by author username or PHID
@@ -1166,6 +1177,8 @@ def register_tools(  # noqa: C901
             repository: Filter by repository PHID (recommended) or name
             title_contains: Filter by title containing this text
             limit: Maximum number of results to return. Default: 50. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
+            after: Opaque cursor from a prior call's next_cursor; pass to fetch the next page.
+            fetch_all: When True, loops the cursor server-side (up to a 25-page safety cap) to return all matching results in one call. Default: False.
 
         Returns:
             List of matching code reviews with pagination metadata
@@ -1184,14 +1197,15 @@ def register_tools(  # noqa: C901
         if title_contains:
             constraints["query"] = title_contains
 
-        result = client.differential.search_revisions(
-            constraints=constraints if constraints else None, limit=limit
-        )
+        def _do(after_cur):
+            return client.differential.search_revisions(
+                constraints=constraints if constraints else None,
+                limit=limit,
+                after=after_cur,
+            )
 
-        # Add pagination metadata
-        result = _add_pagination_metadata(result, result.get("cursor"))
-
-        return {"success": True, "revisions": result}
+        data, meta = _paginate_search(_do, after=after, fetch_all=fetch_all)
+        return {"success": True, "revisions": data, **meta}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
@@ -1412,9 +1426,13 @@ def register_tools(  # noqa: C901
         icon: str = "",
         color: str = "",
         limit: int = 100,
+        after: str = None,
+        fetch_all: bool = False,
     ) -> dict:
         """
         Search for projects with advanced filtering capabilities.
+        A single call returns at most ~100 results and is NOT exhaustive; for
+        'all/every' queries pass fetch_all=True.
 
         Args:
             query_key: Builtin query ("active", "all", "archived")
@@ -1432,6 +1450,8 @@ def register_tools(  # noqa: C901
             icon: Filter by project icon
             color: Filter by project color
             limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
+            after: Opaque cursor from a prior call's next_cursor; pass to fetch the next page.
+            fetch_all: When True, loops the cursor server-side (up to a 25-page safety cap) to return all matching results in one call. Default: False.
 
         Returns:
             Search results with project data and pagination metadata
@@ -1474,15 +1494,15 @@ def register_tools(  # noqa: C901
         # Note: Some constraints like ancestors, descendants, etc. may not be supported
         # by this Phorge instance. They are included for completeness.
 
-        result = client.project.search_projects(
-            constraints=constraints if constraints else None,
-            limit=limit,
-        )
+        def _do(after_cur):
+            return client.project.search_projects(
+                constraints=constraints if constraints else None,
+                limit=limit,
+                after=after_cur,
+            )
 
-        # Add pagination metadata
-        result = _add_pagination_metadata(result, result.get("cursor"))
-
-        return {"success": True, "projects": result}
+        data, meta = _paginate_search(_do, after=after, fetch_all=fetch_all)
+        return {"success": True, "projects": data, **meta}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
@@ -1720,9 +1740,13 @@ def register_tools(  # noqa: C901
         column_phid: str,
         limit: int = 100,
         include_description: bool = True,
+        after: str = None,
+        fetch_all: bool = False,
     ) -> dict:
         """
         Search for tasks in a specific workboard column.
+        A single call returns at most ~100 results and is NOT exhaustive; for
+        'all/every' queries pass fetch_all=True.
 
         Args:
             column_phid: Column PHID to search tasks in
@@ -1730,10 +1754,15 @@ def register_tools(  # noqa: C901
             include_description: Include task description in results (default: True). Set to False
                 to omit fields.description from each task, reducing payload size by ~70-90% for
                 typical tasks. Use when only metadata (id, title, status, priority) is needed.
+            after: Opaque cursor from a prior call's next_cursor; pass to fetch the next page.
+            fetch_all: When True, loops the cursor server-side (up to a 25-page safety cap) to return all matching results in one call. Forces include_description=False. Default: False.
 
         Returns:
             Search results with task data and pagination metadata
         """
+        if fetch_all:
+            include_description = False
+
         client = get_client_func()
 
         # Build constraints for column search
@@ -1741,19 +1770,18 @@ def register_tools(  # noqa: C901
             "columnPHIDs": [column_phid],
         }
 
-        result = client.maniphest.search_tasks(
-            constraints=constraints,
-            limit=limit,
-        )
+        def _do(after_cur):
+            return client.maniphest.search_tasks(
+                constraints=constraints,
+                limit=limit,
+                after=after_cur,
+            )
 
+        data, meta = _paginate_search(_do, after=after, fetch_all=fetch_all)
         if not include_description:
-            for task in result.get("data", []):
+            for task in data:
                 task.get("fields", {}).pop("description", None)
-
-        # Add pagination metadata
-        result = _add_pagination_metadata(result, result.get("cursor"))
-
-        return {"success": True, "tasks": result}
+        return {"success": True, "tasks": data, **meta}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     def pha_file_download(file_ref: str):

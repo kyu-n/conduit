@@ -690,7 +690,8 @@ class TestPhaWorkboardSearchTasksByColumnIncludeDescription(unittest.TestCase):
         fn = _tool_fn(client, "pha_workboard_search_tasks_by_column")
         result = fn(column_phid="PHID-PCOL-abc", include_description=False)
         self.assertTrue(result["success"])
-        for task in result["tasks"]["data"]:
+        self.assertIsInstance(result["tasks"], list)
+        for task in result["tasks"]:
             self.assertNotIn("description", task["fields"])
 
     def test_description_kept_when_true(self):
@@ -698,7 +699,8 @@ class TestPhaWorkboardSearchTasksByColumnIncludeDescription(unittest.TestCase):
         fn = _tool_fn(client, "pha_workboard_search_tasks_by_column")
         result = fn(column_phid="PHID-PCOL-abc", include_description=True)
         self.assertTrue(result["success"])
-        for task in result["tasks"]["data"]:
+        self.assertIsInstance(result["tasks"], list)
+        for task in result["tasks"]:
             self.assertIn("description", task["fields"])
 
 
@@ -862,7 +864,7 @@ class TestPaginateSearchHelper(unittest.TestCase):
             {"data": [5], "cursor": {"after": None}},
         ]
         data, meta = _paginate_search(
-            self._make_do(pages), limit=100, after=None, fetch_all=True
+            self._make_do(pages), after=None, fetch_all=True
         )
         self.assertEqual(data, [1, 2, 3, 4, 5])
         self.assertFalse(meta["hit_cap"])
@@ -875,7 +877,7 @@ class TestPaginateSearchHelper(unittest.TestCase):
 
         pages = [{"data": [1, 2], "cursor": {"after": "p2"}}]
         data, meta = _paginate_search(
-            self._make_do(pages), limit=100, after=None, fetch_all=False
+            self._make_do(pages), after=None, fetch_all=False
         )
         self.assertEqual(data, [1, 2])
         self.assertTrue(meta["has_more"])
@@ -887,7 +889,7 @@ class TestPaginateSearchHelper(unittest.TestCase):
 
         pages = [{"data": [1, 2], "cursor": {"after": None}}]
         data, meta = _paginate_search(
-            self._make_do(pages), limit=100, after=None, fetch_all=False
+            self._make_do(pages), after=None, fetch_all=False
         )
         self.assertEqual(data, [1, 2])
         self.assertFalse(meta["has_more"])
@@ -903,7 +905,7 @@ class TestPaginateSearchHelper(unittest.TestCase):
             n[0] += 1
             return {"data": [n[0]], "cursor": {"after": f"p{n[0]}"}}
 
-        data, meta = _paginate_search(_do, limit=100, after=None, fetch_all=True, page_cap=25)
+        data, meta = _paginate_search(_do, after=None, fetch_all=True, page_cap=25)
         self.assertEqual(len(data), 25)
         self.assertTrue(meta["hit_cap"])
         self.assertTrue(meta["has_more"])
@@ -921,7 +923,7 @@ class TestPaginateSearchHelper(unittest.TestCase):
                 return {"data": [100], "cursor": {"after": "p2"}}
             raise RuntimeError("mid-loop failure")
 
-        data, meta = _paginate_search(_do, limit=100, after=None, fetch_all=True)
+        data, meta = _paginate_search(_do, after=None, fetch_all=True)
         self.assertEqual(data, [100])
         self.assertTrue(meta["has_more"])
         self.assertIn("note", meta)
@@ -933,7 +935,7 @@ class TestPaginateSearchHelper(unittest.TestCase):
             raise RuntimeError("first page error")
 
         with self.assertRaises(RuntimeError):
-            _paginate_search(_do, limit=100, after=None, fetch_all=True)
+            _paginate_search(_do, after=None, fetch_all=True)
 
 
 class TestPhaTaskSearchAdvancedFetchAll(unittest.TestCase):
@@ -1006,6 +1008,318 @@ class TestPhaTaskSearchAdvancedFetchAll(unittest.TestCase):
         self.assertTrue(result["has_more"])
         self.assertEqual(result["next_cursor"], "PAGE2")
         self.assertIn("note", result)
+
+
+class TestPhaRepositorySearchFetchAll(unittest.TestCase):
+    """pha_repository_search: fetch_all accumulates pages; client receives after cursor."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_repository_search")
+
+    def _multi_page_client(self):
+        client = Mock()
+        pages = [
+            {"data": [{"id": 1}, {"id": 2}], "cursor": {"after": "p2"}},
+            {"data": [{"id": 3}, {"id": 4}], "cursor": {"after": None}},
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.diffusion.search_repositories.side_effect = search
+        return client
+
+    def test_fetch_all_accumulates_both_pages(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(fetch_all=True)
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["repositories"], list)
+        self.assertEqual(len(result["repositories"]), 4)
+        self.assertEqual(result["total"], 4)
+        self.assertFalse(result["has_more"])
+        self.assertFalse(result["hit_cap"])
+
+    def test_fetch_all_false_first_page_with_has_more_and_note(self):
+        client = Mock()
+        client.diffusion.search_repositories.return_value = {
+            "data": [{"id": 1}, {"id": 2}],
+            "cursor": {"after": "PAGE2"},
+        }
+        result = self._fn(client)()
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["repositories"], list)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(result["next_cursor"], "PAGE2")
+        self.assertIn("note", result)
+
+    def test_repositories_is_list_not_dict(self):
+        client = Mock()
+        client.diffusion.search_repositories.return_value = {
+            "data": [{"id": 1}],
+            "cursor": {"after": None},
+        }
+        result = self._fn(client)()
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["repositories"], list)
+
+    def test_client_receives_after_cursor(self):
+        """search_repositories is called with after=after_cur on the second page."""
+        client = Mock()
+        pages = [
+            {"data": [{"id": 1}], "cursor": {"after": "CURSOR_P2"}},
+            {"data": [{"id": 2}], "cursor": {"after": None}},
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.diffusion.search_repositories.side_effect = search
+        self._fn(client)(fetch_all=True)
+        calls = client.diffusion.search_repositories.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0].kwargs.get("after"))
+        self.assertEqual(calls[1].kwargs.get("after"), "CURSOR_P2")
+
+
+class TestPhaDiffSearchFetchAll(unittest.TestCase):
+    """pha_diff_search: fetch_all accumulates pages; client receives after cursor."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_diff_search")
+
+    def _multi_page_client(self):
+        client = Mock()
+        pages = [
+            {"data": [{"id": 10}, {"id": 11}], "cursor": {"after": "p2"}},
+            {"data": [{"id": 12}], "cursor": {"after": None}},
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.differential.search_revisions.side_effect = search
+        return client
+
+    def test_fetch_all_accumulates_both_pages(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(fetch_all=True)
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["revisions"], list)
+        self.assertEqual(len(result["revisions"]), 3)
+        self.assertEqual(result["total"], 3)
+        self.assertFalse(result["has_more"])
+
+    def test_fetch_all_false_first_page_with_has_more_and_note(self):
+        client = Mock()
+        client.differential.search_revisions.return_value = {
+            "data": [{"id": 10}, {"id": 11}],
+            "cursor": {"after": "PAGE2"},
+        }
+        result = self._fn(client)()
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["revisions"], list)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(result["next_cursor"], "PAGE2")
+        self.assertIn("note", result)
+
+    def test_revisions_is_list_not_dict(self):
+        client = Mock()
+        client.differential.search_revisions.return_value = {
+            "data": [{"id": 10}],
+            "cursor": {"after": None},
+        }
+        result = self._fn(client)()
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["revisions"], list)
+
+    def test_client_receives_after_cursor(self):
+        """search_revisions is called with after=after_cur on the second page."""
+        client = Mock()
+        pages = [
+            {"data": [{"id": 10}], "cursor": {"after": "CURSOR_P2"}},
+            {"data": [{"id": 11}], "cursor": {"after": None}},
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.differential.search_revisions.side_effect = search
+        self._fn(client)(fetch_all=True)
+        calls = client.differential.search_revisions.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0].kwargs.get("after"))
+        self.assertEqual(calls[1].kwargs.get("after"), "CURSOR_P2")
+
+
+class TestPhaProjectSearchFetchAll(unittest.TestCase):
+    """pha_project_search: fetch_all accumulates pages; client receives after cursor."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_project_search")
+
+    def _multi_page_client(self):
+        client = Mock()
+        pages = [
+            {"data": [{"id": 100}, {"id": 101}], "cursor": {"after": "p2"}},
+            {"data": [{"id": 102}], "cursor": {"after": None}},
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.project.search_projects.side_effect = search
+        return client
+
+    def test_fetch_all_accumulates_both_pages(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(fetch_all=True)
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["projects"], list)
+        self.assertEqual(len(result["projects"]), 3)
+        self.assertEqual(result["total"], 3)
+        self.assertFalse(result["has_more"])
+
+    def test_fetch_all_false_first_page_with_has_more_and_note(self):
+        client = Mock()
+        client.project.search_projects.return_value = {
+            "data": [{"id": 100}, {"id": 101}],
+            "cursor": {"after": "PAGE2"},
+        }
+        result = self._fn(client)()
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["projects"], list)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(result["next_cursor"], "PAGE2")
+        self.assertIn("note", result)
+
+    def test_projects_is_list_not_dict(self):
+        client = Mock()
+        client.project.search_projects.return_value = {
+            "data": [{"id": 100}],
+            "cursor": {"after": None},
+        }
+        result = self._fn(client)()
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["projects"], list)
+
+    def test_client_receives_after_cursor(self):
+        """search_projects is called with after=after_cur on the second page."""
+        client = Mock()
+        pages = [
+            {"data": [{"id": 100}], "cursor": {"after": "CURSOR_P2"}},
+            {"data": [{"id": 101}], "cursor": {"after": None}},
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.project.search_projects.side_effect = search
+        self._fn(client)(fetch_all=True)
+        calls = client.project.search_projects.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0].kwargs.get("after"))
+        self.assertEqual(calls[1].kwargs.get("after"), "CURSOR_P2")
+
+
+class TestPhaWorkboardSearchTasksByColumnFetchAll(unittest.TestCase):
+    """pha_workboard_search_tasks_by_column: fetch_all accumulates pages."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_workboard_search_tasks_by_column")
+
+    def _multi_page_client(self):
+        client = Mock()
+        pages = [
+            {
+                "data": [
+                    {"id": 1, "fields": {"name": "T1", "description": {"raw": "d"}}},
+                    {"id": 2, "fields": {"name": "T2", "description": {"raw": "d"}}},
+                ],
+                "cursor": {"after": "p2"},
+            },
+            {
+                "data": [
+                    {"id": 3, "fields": {"name": "T3", "description": {"raw": "d"}}},
+                ],
+                "cursor": {"after": None},
+            },
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.maniphest.search_tasks.side_effect = search
+        return client
+
+    def test_fetch_all_accumulates_both_pages(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(column_phid="PHID-PCOL-test", fetch_all=True)
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["tasks"], list)
+        self.assertEqual(len(result["tasks"]), 3)
+        self.assertEqual(result["total"], 3)
+        self.assertFalse(result["has_more"])
+
+    def test_fetch_all_false_first_page_with_has_more_and_note(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"id": 1, "fields": {}}, {"id": 2, "fields": {}}],
+            "cursor": {"after": "PAGE2"},
+        }
+        result = self._fn(client)(column_phid="PHID-PCOL-test")
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["tasks"], list)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(result["next_cursor"], "PAGE2")
+        self.assertIn("note", result)
+
+    def test_tasks_is_list_not_dict(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"id": 1, "fields": {}}],
+            "cursor": {"after": None},
+        }
+        result = self._fn(client)(column_phid="PHID-PCOL-test")
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["tasks"], list)
+
+    def test_fetch_all_forces_description_off(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(column_phid="PHID-PCOL-test", fetch_all=True)
+        self.assertTrue(result["success"])
+        for task in result["tasks"]:
+            self.assertNotIn("description", task.get("fields", {}))
+
+    def test_fetch_all_with_include_description_false(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(
+            column_phid="PHID-PCOL-test", fetch_all=True, include_description=False
+        )
+        self.assertTrue(result["success"])
+        self.assertEqual(len(result["tasks"]), 3)
+        for task in result["tasks"]:
+            self.assertNotIn("description", task["fields"])
 
 
 if __name__ == "__main__":
