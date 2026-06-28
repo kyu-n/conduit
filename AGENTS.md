@@ -105,7 +105,6 @@ diffs = client.differential.search_revisions(author_phids=[user_phid])
 
 ### MCP Tool Development
 - All tools use `@handle_api_errors` decorator for structured error responses
-- Apply `@optimize_token_usage` for search results that may return large datasets
 - Use type-safe transaction objects from `conduit.client.types` for updates
 - Follow naming convention: `pha_<module>_<action>` (e.g., `pha_task_search_advanced`)
 
@@ -206,7 +205,7 @@ client.maniphest.edit_task(task_id, transactions)
 - **Utilities**: Shared functionality in `src/utils/` (errors, validation, parameters)
 - **Tools**: MCP tool definitions in `src/main_tools.py`
 - **Tests**: Mirror source structure in `src/client/tests/`
-- **Specialized Tool Modules**: Advanced tools in `src/tools/` (diffusion_tools.py, handlers.py, optimization.py)
+- **Specialized Tool Modules**: Advanced tools in `src/tools/` (handlers.py)
 
 ## Common Pitfalls
 

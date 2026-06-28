@@ -132,21 +132,6 @@ class TestNewFeatures(unittest.TestCase):
         except Exception as e:
             self.fail(f"register_tools raised an exception: {e}")
 
-    def test_token_optimization_decorator(self):
-        """Test token optimization functionality."""
-
-        from conduit.main_tools import _apply_smart_pagination
-
-        # Test smart pagination
-        test_data = list(range(100))
-        result = _apply_smart_pagination(test_data, limit=20)
-
-        self.assertEqual(result["data"], list(range(20)))
-        self.assertEqual(result["pagination"]["total"], 100)
-        self.assertEqual(result["pagination"]["returned"], 20)
-        self.assertTrue(result["pagination"]["has_more"])
-        self.assertIsNotNone(result["suggestion"])
-
     def test_pagination_metadata(self):
         """Test pagination metadata addition."""
 

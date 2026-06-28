@@ -1,4 +1,3 @@
-from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastmcp import FastMCP
@@ -24,71 +23,6 @@ from conduit.client.unified import PhabricatorClient
 
 
 from conduit.tools.handlers import handle_api_errors
-
-
-# Pagination Functions
-
-
-def _apply_smart_pagination(data: List[Any], limit: int = None) -> dict:
-    """
-    Apply smart pagination to data.
-
-    Args:
-        data: List of data items
-        limit: Maximum number of items to return (optional)
-
-    Returns:
-        Paginated response with metadata
-    """
-    if limit is None:
-        limit = 100  # Default limit
-
-    # Apply limit if data is larger than limit
-    if len(data) > limit:
-        paginated_data = data[:limit]
-        has_more = True
-        total_count = len(data)
-        suggestion = f"Use pagination to retrieve remaining {total_count - limit} items"
-    else:
-        paginated_data = data
-        has_more = False
-        total_count = len(data)
-        suggestion = None
-
-    return {
-        "data": paginated_data,
-        "pagination": {
-            "total": total_count,
-            "returned": len(paginated_data),
-            "has_more": has_more,
-        },
-        "suggestion": suggestion,
-    }
-
-
-def optimize_token_usage(func: Callable) -> Callable:
-    """
-    Decorator to apply smart limits and truncation to search results.
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-
-        # Apply smart limits to search results
-        if isinstance(result, dict) and "data" in result:
-            # Check if this is a search result that needs limits
-            data = result["data"]
-            if isinstance(data, list) and len(data) > 50:
-                # Apply smart pagination
-                optimized_result = _apply_smart_pagination(
-                    data, kwargs.get("limit", 100)
-                )
-                result.update(optimized_result)
-
-        return result
-
-    return wrapper
 
 
 def _truncate_text_response(text: str, max_length: int = 2000) -> dict:
@@ -181,7 +115,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_user_search(
         query_key: str = "",
         ids: Optional[List[int]] = None,
@@ -440,7 +373,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_task_get_transactions(task_id: str) -> dict:
         """
         Get transaction history for a Phabricator task, including comments.
@@ -571,7 +503,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_task_search_advanced(
         query_key: str = "",
         assigned: Optional[List[str]] = None,
@@ -731,7 +662,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_repository_search(
         constraints: Dict[str, Any] = None,
         limit: int = 50,
@@ -864,7 +794,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_repository_browse(
         repository: str,
         path: str = "/",
@@ -947,7 +876,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_repository_history(
         repository: str,
         path: str = "",
@@ -1121,7 +1049,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_diff_search(
         author: str = "",
         reviewer: str = "",
@@ -1358,7 +1285,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_project_search(
         query_key: str = "",
         ids: Optional[List[int]] = None,
@@ -1598,7 +1524,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_workboard_search_columns(
         project_phids: Optional[List[str]] = None,
         phids: Optional[List[str]] = None,
@@ -1680,7 +1605,6 @@ def register_tools(  # noqa: C901
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
-    @optimize_token_usage
     def pha_workboard_search_tasks_by_column(
         column_phid: str,
         limit: int = 100,
