@@ -53,7 +53,7 @@ class TestNewFeatures(unittest.TestCase):
         # Test error handling
         result = test_function(success=False)
         self.assertEqual(result["success"], False)
-        self.assertEqual(result["error"], "Parameter validation failed: Test error")
+        self.assertEqual(result["error"], "Test error")
         self.assertEqual(result["error_code"], "VALIDATION_ERROR")
 
     def test_enhanced_client_configuration(self):

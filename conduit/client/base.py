@@ -90,8 +90,20 @@ class BasePhabricatorClient(ABC):
 
             return data.get("result", {})
 
+        except httpx.TimeoutException as e:
+            raise PhabricatorAPIError(
+                f"Request timed out: {str(e)}", error_code="ERR-TIMEOUT"
+            )
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            raise PhabricatorAPIError(
+                f"HTTP {status} error: {str(e)}",
+                error_code="ERR-RATE-LIMITING" if status == 429 else "ERR-HTTP",
+            )
         except httpx.HTTPError as e:
-            raise PhabricatorAPIError(f"Network error: {str(e)}")
+            raise PhabricatorAPIError(
+                f"Network error: {str(e)}", error_code="ERR-NETWORK"
+            )
         except json.JSONDecodeError as e:
             raise PhabricatorAPIError(f"Invalid JSON response: {str(e)}")
 

@@ -5,6 +5,28 @@ from conduit.client import PhabricatorAPIError
 from conduit.utils import ErrorCode
 
 
+def _classify_conduit_code(raw_code: str) -> ErrorCode:
+    """Map a Conduit error_code string to an ErrorCode.
+
+    Conduit uses its own vocabulary (ERR-INVALID-AUTH, ERR-RATE-LIMITING,
+    ERR_BAD_TASK, ...) with either '-' or '_' separators, none of which match the
+    ErrorCode enum values, so a bare ErrorCode(raw_code) always fails. Classify
+    the common actionable cases; anything unrecognized stays UNKNOWN_ERROR.
+    """
+    try:
+        return ErrorCode(raw_code)
+    except ValueError:
+        pass
+    norm = str(raw_code).strip().upper().replace("_", "-")
+    if "RATE-LIMIT" in norm:
+        return ErrorCode.RATE_LIMIT_ERROR
+    if "AUTH" in norm or "SESSION" in norm or norm == "ERR-INVALID-TOKEN":
+        return ErrorCode.AUTH_ERROR
+    if "TIMEOUT" in norm or "NETWORK" in norm:
+        return ErrorCode.NETWORK_ERROR
+    return ErrorCode.UNKNOWN_ERROR
+
+
 def _get_error_details(error: Exception) -> Dict[str, Any]:
     """
     Get simplified error information based on exception type.
@@ -20,13 +42,8 @@ def _get_error_details(error: Exception) -> Dict[str, Any]:
 
     # Map exception types to error codes
     if isinstance(error, PhabricatorAPIError):
-        if hasattr(error, "error_code") and error.error_code:
-            try:
-                error_code = ErrorCode(error.error_code)
-            except ValueError:
-                # Preserve unknown conduit error codes without failing the
-                # error handler pipeline.
-                error_code = ErrorCode.UNKNOWN_ERROR
+        if getattr(error, "error_code", None):
+            error_code = _classify_conduit_code(error.error_code)
     elif isinstance(error, (ConnectionError, TimeoutError)):
         error_code = ErrorCode.NETWORK_ERROR
     elif isinstance(error, (ValueError, KeyError)):
@@ -109,13 +126,11 @@ def handle_api_errors(func: Callable) -> Callable:
             return response
         except Exception as e:
             error_details = _get_error_details(e)
-            response = {
+            return {
                 "success": False,
-                "error": f"Parameter validation failed: {error_details['error']}",
+                "error": error_details["error"],
                 "error_code": error_details["error_code"],
                 "suggestion": error_details["suggestion"],
             }
-            # Maintain backward compatibility by keeping the original error message
-            return response
 
     return wrapper
