@@ -234,5 +234,151 @@ class TestPhaTaskRelationships(unittest.TestCase):
         client.maniphest.search_tasks.assert_not_called()
 
 
+class TestPhaFileDownloadHardening(unittest.TestCase):
+    def _client(self, fields, download=None):
+        client = Mock()
+        client.file.search_files.return_value = {
+            "data": [{"phid": "PHID-FILE-X", "id": 1, "fields": fields}]
+        }
+        client.file.download_file.return_value = download
+        return client
+
+    def test_meta_includes_uri_and_datauri(self):
+        client = self._client(
+            {
+                "name": "spec.pdf",
+                "size": 100,
+                "uri": "https://example.test/F1",
+                "dataURI": "https://example.test/data/F1",
+            }
+        )
+        result = _tool_fn(client, "pha_file_download")("F1")
+        self.assertFalse(result["is_image"])
+        self.assertEqual(result["file"]["uri"], "https://example.test/F1")
+        self.assertEqual(result["file"]["dataURI"], "https://example.test/data/F1")
+
+    def test_extensionless_image_is_sniffed(self):
+        # No extension and no mimeType, but PNG magic bytes -> viewable Image.
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"rest").decode()
+        client = self._client({"name": "mockup", "size": 12}, download=png)
+        result = _tool_fn(client, "pha_file_download")("F1")
+        self.assertIsInstance(result, Image)
+        self.assertEqual(result._format, "png")
+
+    def test_extensionless_nonimage_returns_meta(self):
+        blob = base64.b64encode(b"not an image at all").decode()
+        client = self._client(
+            {"name": "datafile", "size": 19, "uri": "https://example.test/F1"},
+            download=blob,
+        )
+        result = _tool_fn(client, "pha_file_download")("F1")
+        self.assertIsInstance(result, dict)
+        self.assertFalse(result["is_image"])
+        self.assertEqual(result["file"]["uri"], "https://example.test/F1")
+
+    def test_download_error_is_structured(self):
+        from conduit.client import PhabricatorAPIError
+
+        client = Mock()
+        client.file.search_files.side_effect = PhabricatorAPIError("boom")
+        result = _tool_fn(client, "pha_file_download")("F1")
+        self.assertIsInstance(result, dict)
+        self.assertFalse(result["success"])
+        self.assertIn("boom", result["error"])
+
+
+class TestPhaTaskGet(unittest.TestCase):
+    def test_strips_t_prefix(self):
+        client = Mock()
+        client.maniphest.get_task.return_value = {"objectName": "T7298"}
+        result = _tool_fn(client, "pha_task_get")("T7298")
+        self.assertTrue(result["success"])
+        client.maniphest.get_task.assert_called_once_with(7298)
+
+    def test_accepts_bare_numeric(self):
+        client = Mock()
+        client.maniphest.get_task.return_value = {"objectName": "T7298"}
+        result = _tool_fn(client, "pha_task_get")("7298")
+        self.assertTrue(result["success"])
+        client.maniphest.get_task.assert_called_once_with(7298)
+
+    def test_rejects_phid_and_garbage(self):
+        client = Mock()
+        result = _tool_fn(client, "pha_task_get")("PHID-TASK-abc")
+        self.assertFalse(result["success"])
+        client.maniphest.get_task.assert_not_called()
+
+
+class TestErrorClassification(unittest.TestCase):
+    def test_classify_conduit_codes(self):
+        from conduit.tools.handlers import _classify_conduit_code
+        from conduit.utils import ErrorCode
+
+        self.assertEqual(
+            _classify_conduit_code("ERR-INVALID-AUTH"), ErrorCode.AUTH_ERROR
+        )
+        self.assertEqual(
+            _classify_conduit_code("ERR_INVALID_SESSION"), ErrorCode.AUTH_ERROR
+        )
+        self.assertEqual(
+            _classify_conduit_code("ERR-RATE-LIMITING"), ErrorCode.RATE_LIMIT_ERROR
+        )
+        self.assertEqual(
+            _classify_conduit_code("ERR-TIMEOUT"), ErrorCode.NETWORK_ERROR
+        )
+        # Unrecognized conduit codes stay UNKNOWN (preserves prior behavior).
+        self.assertEqual(
+            _classify_conduit_code("ERR-CONDUIT-CORE"), ErrorCode.UNKNOWN_ERROR
+        )
+        # An already-canonical enum value still resolves.
+        self.assertEqual(_classify_conduit_code("AUTH_ERROR"), ErrorCode.AUTH_ERROR)
+
+    def test_internal_error_not_mislabeled_as_validation(self):
+        from conduit.tools.handlers import handle_api_errors
+
+        @handle_api_errors
+        def boom():
+            raise RuntimeError("kaboom")
+
+        result = boom()
+        self.assertFalse(result["success"])
+        self.assertNotIn("Parameter validation failed", result["error"])
+        self.assertIn("kaboom", result["error"])
+
+
+class TestBaseHttpErrorCodes(unittest.TestCase):
+    """base.py classifies httpx failures with a Conduit-style error_code."""
+
+    def _client(self):
+        from conduit.client.file import FileClient
+
+        return FileClient(api_url="http://example.test/api/", api_token="t")
+
+    def test_timeout_sets_err_timeout(self):
+        import httpx
+        from conduit.client import PhabricatorAPIError
+
+        c = self._client()
+        c.client = Mock()
+        c.client.post.side_effect = httpx.TimeoutException("slow")
+        with self.assertRaises(PhabricatorAPIError) as ctx:
+            c._make_request("file.search", {})
+        self.assertEqual(ctx.exception.error_code, "ERR-TIMEOUT")
+
+    def test_429_sets_rate_limiting(self):
+        import httpx
+        from conduit.client import PhabricatorAPIError
+
+        c = self._client()
+        resp = httpx.Response(
+            429, request=httpx.Request("POST", "http://example.test/api/file.search")
+        )
+        c.client = Mock()
+        c.client.post.return_value = resp
+        with self.assertRaises(PhabricatorAPIError) as ctx:
+            c._make_request("file.search", {})
+        self.assertEqual(ctx.exception.error_code, "ERR-RATE-LIMITING")
+
+
 if __name__ == "__main__":
     unittest.main()

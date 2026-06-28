@@ -137,6 +137,21 @@ def _add_pagination_metadata(result: dict, cursor: dict = None) -> dict:
     return result
 
 
+def _sniff_image_format(data: bytes) -> str:
+    """Return a FastMCP image format from magic bytes, or '' if not a known image."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if data[:2] == b"BM":
+        return "bmp"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
 def register_tools(  # noqa: C901
     mcp: FastMCP,
     get_client_func: Callable[[], PhabricatorClient],
@@ -300,13 +315,21 @@ def register_tools(  # noqa: C901
         Get details of a specific Phabricator task
 
         Args:
-            task_id: The numeric ID of the task to retrieve (e.g., 1234)
+            task_id: Task identifier, "T123" or "123".
 
         Returns:
             Task details
         """
+        import re as _re
+
+        m = _re.match(r"^T?(\d+)$", str(task_id).strip(), _re.IGNORECASE)
+        if not m:
+            return {
+                "success": False,
+                "error": f"Unrecognized task id: {task_id!r}. Use 'T123' or '123'.",
+            }
         client = get_client_func()
-        result = client.maniphest.get_task(task_id)
+        result = client.maniphest.get_task(int(m.group(1)))
         return {"success": True, "task": result}
 
     @mcp.tool()
@@ -1706,8 +1729,6 @@ def register_tools(  # noqa: C901
         import base64
         import re as _re
 
-        client = get_client_func()
-
         ref = file_ref.strip()
         if ref.upper().startswith("PHID-FILE-"):
             constraints = {"phids": [ref]}
@@ -1723,86 +1744,107 @@ def register_tools(  # noqa: C901
                 }
             constraints = {"ids": [int(m.group(1))]}
 
-        search = client.file.search_files(constraints=constraints, limit=1)
-        data = search.get("data") or []
-        if not data:
-            return {"success": False, "error": f"File {file_ref} not found"}
-
-        record = data[0]
-        phid = record.get("phid")
-        fields = record.get("fields", {})
-        name = fields.get("name") or ""
-        # Phorge's file.search omits mimeType, so detect images by extension and
-        # use mimeType only when a given instance does provide it.
-        mime = fields.get("mimeType") or fields.get("mimetype") or ""
-        size = fields.get("size") or fields.get("byteSize") or 0
         try:
-            size = int(size)
-        except (TypeError, ValueError):
-            size = 0
+            client = get_client_func()
+            search = client.file.search_files(constraints=constraints, limit=1)
+            data = search.get("data") or []
+            if not data:
+                return {"success": False, "error": f"File {file_ref} not found"}
 
-        ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
-        image_exts = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
-        is_image = mime.startswith("image/") or ext in image_exts
+            record = data[0]
+            phid = record.get("phid")
+            fields = record.get("fields", {})
+            name = fields.get("name") or ""
+            # Phorge's file.search omits mimeType, so detect images by extension
+            # and fall back to a magic-byte sniff for extensionless files; use
+            # mimeType only when an instance provides it.
+            mime = fields.get("mimeType") or fields.get("mimetype") or ""
+            size = fields.get("size") or fields.get("byteSize") or 0
+            try:
+                size = int(size)
+            except (TypeError, ValueError):
+                size = 0
 
-        meta = {
-            "phid": phid,
-            "id": record.get("id"),
-            "name": name,
-            "mimeType": mime,
-            "byteSize": size,
-        }
+            ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
+            image_exts = {"png", "jpg", "jpeg", "gif", "webp", "bmp"}
+            is_image = mime.startswith("image/") or ext in image_exts
+            # No mimeType and no extension: type is unknown, so sniff the bytes
+            # below rather than assume non-image (a mockup may have neither).
+            ambiguous = not mime and not ext
 
-        # Refuse oversized payloads so a stray video cannot blow up context.
-        max_bytes = 10 * 1024 * 1024
-        if size and size > max_bytes:
+            meta = {
+                "phid": phid,
+                "id": record.get("id"),
+                "name": name,
+                "mimeType": mime,
+                "byteSize": size,
+                "uri": fields.get("uri"),
+                "dataURI": fields.get("dataURI"),
+            }
+
+            # Refuse oversized payloads so a stray video cannot blow up context.
+            max_bytes = 10 * 1024 * 1024
+            if size and size > max_bytes:
+                return {
+                    "success": False,
+                    "error": (
+                        f"File is {size} bytes, over the {max_bytes}-byte limit; "
+                        "not downloaded."
+                    ),
+                    "file": meta,
+                }
+
+            if not is_image and not ambiguous:
+                return {
+                    "success": True,
+                    "is_image": False,
+                    "note": "Not an image; open it at its `uri`.",
+                    "file": meta,
+                }
+
+            if not phid:
+                return {
+                    "success": False,
+                    "error": "File record has no PHID to download",
+                    "file": meta,
+                }
+
+            # file.download returns the base64 string itself (or {}/None on
+            # failure).
+            download = client.file.download_file(file_phid=phid)
+            if not isinstance(download, str) or not download:
+                return {
+                    "success": False,
+                    "error": "file.download returned no data",
+                    "file": meta,
+                }
+
+            raw = base64.b64decode(download)
+
+            # Format for FastMCP Image: mimeType subtype, else extension, else a
+            # magic-byte sniff (covers the extensionless-image case).
+            fmt = ""
+            if "/" in mime:
+                fmt = mime.split("/", 1)[1].split(";")[0].strip()
+            if not fmt and ext:
+                fmt = ext
+            if not fmt:
+                fmt = _sniff_image_format(raw)
+            if not fmt:
+                return {
+                    "success": True,
+                    "is_image": False,
+                    "note": "Not a recognized image; open it at its `uri`.",
+                    "file": meta,
+                }
+            if fmt == "jpg":
+                fmt = "jpeg"
+            return Image(data=raw, format=fmt)
+        except Exception as e:
             return {
                 "success": False,
-                "error": (
-                    f"File is {size} bytes, over the {max_bytes}-byte limit; "
-                    "not downloaded."
-                ),
-                "file": meta,
+                "error": f"Failed to download {file_ref}: {e}",
             }
-
-        if not is_image:
-            return {
-                "success": True,
-                "is_image": False,
-                "note": (
-                    "Not an image; bytes not returned. Use the metadata or open "
-                    "it in Phorge."
-                ),
-                "file": meta,
-            }
-
-        if not phid:
-            return {
-                "success": False,
-                "error": "File record has no PHID to download",
-                "file": meta,
-            }
-
-        # file.download returns the base64 string itself (or {}/None on failure).
-        download = client.file.download_file(file_phid=phid)
-        if not isinstance(download, str) or not download:
-            return {
-                "success": False,
-                "error": "file.download returned no data",
-                "file": meta,
-            }
-
-        raw = base64.b64decode(download)
-
-        # The mimeType subtype is the FastMCP image format, e.g. image/png -> png.
-        fmt = ""
-        if "/" in mime:
-            fmt = mime.split("/", 1)[1].split(";")[0].strip()
-        if not fmt and name and "." in name:
-            fmt = name.rsplit(".", 1)[1].lower()
-        if fmt == "jpg":
-            fmt = "jpeg"
-        return Image(data=raw, format=fmt or "png")
 
     @mcp.tool()
     @handle_api_errors
