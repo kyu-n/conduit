@@ -439,7 +439,7 @@ class TestToolAnnotations(unittest.TestCase):
 
 
 class TestTextPayloadCapping(unittest.TestCase):
-    """Part 2: content tools must cap responses at 50000 chars and report truncation."""
+    """Content tools cap responses at 50000 chars and report truncation."""
 
     BIG = "x" * 60000
 
@@ -619,7 +619,7 @@ class TestHandleApiErrorsToolResult(unittest.TestCase):
 
 
 class TestPhaTaskGetPersonalIncludeDescription(unittest.TestCase):
-    """C4: include_description strips fields.description when False."""
+    """include_description strips fields.description when False."""
 
     def _make_result(self, desc="some description"):
         return {
@@ -670,7 +670,7 @@ class TestPhaTaskGetPersonalIncludeDescription(unittest.TestCase):
 
 
 class TestPhaWorkboardSearchTasksByColumnIncludeDescription(unittest.TestCase):
-    """C4: include_description strips fields.description when False."""
+    """include_description strips fields.description when False."""
 
     def _make_result(self, desc="workboard desc"):
         return {
@@ -703,7 +703,7 @@ class TestPhaWorkboardSearchTasksByColumnIncludeDescription(unittest.TestCase):
 
 
 class TestPhaTaskGetTransactionsHasMore(unittest.TestCase):
-    """C5: has_more reflects whether cursor.after is set on transactions."""
+    """has_more reflects whether cursor.after is set on transactions."""
 
     def _client_with_cursor(self, after_value):
         client = Mock()
@@ -742,7 +742,7 @@ class TestPhaTaskGetTransactionsHasMore(unittest.TestCase):
 
 
 class TestPhaTaskRelationshipsHasMore(unittest.TestCase):
-    """C5: has_more is True if either subtasks or parents search was truncated."""
+    """has_more is True if either subtasks or parents search was truncated."""
 
     def _search_side_effect(self, subtask_cursor=None, parent_cursor=None):
         def search(constraints=None, **kwargs):
@@ -819,6 +819,24 @@ class TestPhaTaskRelationshipsOutputSchema(unittest.TestCase):
     def test_output_schema_is_permissive(self):
         tool = asyncio.run(self._mcp().get_tool("pha_task_relationships"))
         self.assertTrue(tool.output_schema.get("additionalProperties", False))
+
+
+class TestLiteralEnumTools(unittest.TestCase):
+    """pha_diff_add_comment and pha_repository_create register with Literal params."""
+
+    def test_diff_add_comment_registers_and_accepts_valid_action(self):
+        client = Mock()
+        client.differential.edit_revision.return_value = {"success": True}
+        fn = _tool_fn(client, "pha_diff_add_comment")
+        result = fn(revision_id="D123", comment="LGTM", action="accept")
+        self.assertTrue(result["success"])
+
+    def test_repository_create_registers_and_accepts_valid_vcs_type(self):
+        client = Mock()
+        client.diffusion.create_repository.return_value = {"id": 1}
+        fn = _tool_fn(client, "pha_repository_create")
+        result = fn(name="my-repo", vcs_type="git")
+        self.assertTrue(result["success"])
 
 
 if __name__ == "__main__":

@@ -717,7 +717,7 @@ def register_tools(  # noqa: C901
     @handle_api_errors
     def pha_repository_create(
         name: str,
-        vcs_type: str = "git",
+        vcs_type: Literal["git", "hg", "svn"] = "git",
         description: str = "",
         callsign: str = "",
     ) -> dict:
@@ -1167,7 +1167,7 @@ def register_tools(  # noqa: C901
     def pha_diff_add_comment(
         revision_id: str,
         comment: str,
-        action: str = "comment",
+        action: Literal["comment", "accept", "reject", "request-changes"] = "comment",
     ) -> dict:
         """
         Add a comment to a code review.

@@ -75,6 +75,8 @@ pip install -e .[dev]
 This will install the package in editable mode with all development dependencies.
 
 ### As HTTP/SSE Server
+> **Note:** The HTTP+SSE transport is deprecated as of MCP spec 2025-03-26 in favor of Streamable HTTP, and is kept here only for backward compatibility.
+
 Conduit can run as an HTTP/SSE server for multi-user scenarios. This mode allows multiple clients to connect simultaneously, each using their own authentication tokens.
 
 ```bash
