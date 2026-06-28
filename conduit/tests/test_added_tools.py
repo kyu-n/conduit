@@ -798,5 +798,28 @@ class TestPhaTaskRelationshipsHasMore(unittest.TestCase):
         self.assertFalse(result["has_more"])
 
 
+class TestPhaTaskRelationshipsOutputSchema(unittest.TestCase):
+    def _mcp(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {"data": []}
+        mcp = FastMCP("schema-test")
+        register_tools(mcp, lambda: client)
+        return mcp
+
+    def test_output_schema_is_set(self):
+        tool = asyncio.run(self._mcp().get_tool("pha_task_relationships"))
+        self.assertIsInstance(tool.output_schema, dict)
+
+    def test_output_schema_has_parents_and_subtasks(self):
+        tool = asyncio.run(self._mcp().get_tool("pha_task_relationships"))
+        props = tool.output_schema.get("properties", {})
+        self.assertIn("parents", props)
+        self.assertIn("subtasks", props)
+
+    def test_output_schema_is_permissive(self):
+        tool = asyncio.run(self._mcp().get_tool("pha_task_relationships"))
+        self.assertTrue(tool.output_schema.get("additionalProperties", False))
+
+
 if __name__ == "__main__":
     unittest.main()

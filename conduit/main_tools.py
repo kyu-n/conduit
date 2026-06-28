@@ -1821,7 +1821,26 @@ def register_tools(  # noqa: C901
                 "error": f"Failed to download {file_ref}: {e}",
             }
 
-    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+    @mcp.tool(
+        annotations=ToolAnnotations(readOnlyHint=True),
+        output_schema={
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean"},
+                "task_id": {"type": "integer"},
+                "has_more": {"type": "boolean"},
+                "parents": {"type": "array", "items": {
+                    "type": "object",
+                    "properties": {"id": {"type": "integer"}, "title": {"type": "string"}, "status": {"type": "string"}},
+                }},
+                "subtasks": {"type": "array", "items": {
+                    "type": "object",
+                    "properties": {"id": {"type": "integer"}, "title": {"type": "string"}, "status": {"type": "string"}},
+                }},
+            },
+            "additionalProperties": True,
+        },
+    )
     @handle_api_errors
     def pha_task_relationships(task_id: str) -> dict:
         """
