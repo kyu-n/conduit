@@ -418,7 +418,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
             [self._make_task(1, "Test Task")]
         )
         result = self._get_func()()
-        self.assertIn("description", result["results"]["data"][0]["fields"])
+        self.assertIn("description", result["results"][0]["fields"])
 
     def test_description_included_when_true(self):
         """Description is present when include_description=True."""
@@ -426,7 +426,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
             [self._make_task(1, "Test Task")]
         )
         result = self._get_func()(include_description=True)
-        self.assertIn("description", result["results"]["data"][0]["fields"])
+        self.assertIn("description", result["results"][0]["fields"])
 
     def test_description_stripped_when_false(self):
         """Description is absent when include_description=False."""
@@ -434,7 +434,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
             [self._make_task(1, "Test Task", "Long description to be stripped")]
         )
         result = self._get_func()(include_description=False)
-        self.assertNotIn("description", result["results"]["data"][0]["fields"])
+        self.assertNotIn("description", result["results"][0]["fields"])
 
     def test_other_fields_preserved_when_description_stripped(self):
         """Metadata fields survive when include_description=False."""
@@ -442,7 +442,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
             [self._make_task(42, "Important Task")]
         )
         result = self._get_func()(include_description=False)
-        fields = result["results"]["data"][0]["fields"]
+        fields = result["results"][0]["fields"]
         self.assertEqual(fields["name"], "Important Task")
         self.assertEqual(fields["status"]["value"], "open")
         self.assertEqual(fields["priority"]["value"], 50)
@@ -454,7 +454,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
             tasks
         )
         result = self._get_func()(include_description=False)
-        for task in result["results"]["data"]:
+        for task in result["results"]:
             self.assertNotIn("description", task["fields"])
 
     def test_no_error_when_task_has_no_description_field(self):
@@ -470,7 +470,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
         )
         result = self._get_func()(include_description=False)
         self.assertTrue(result["success"])
-        self.assertNotIn("description", result["results"]["data"][0]["fields"])
+        self.assertNotIn("description", result["results"][0]["fields"])
 
     def test_empty_result_list_handled_gracefully(self):
         """Empty data list with include_description=False does not raise."""
@@ -479,7 +479,7 @@ class TestTaskSearchAdvancedIncludeDescription(unittest.TestCase):
         )
         result = self._get_func()(include_description=False)
         self.assertTrue(result["success"])
-        self.assertEqual(result["results"]["data"], [])
+        self.assertEqual(result["results"], [])
 
 
 if __name__ == "__main__":

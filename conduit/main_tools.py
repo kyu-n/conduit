@@ -88,6 +88,71 @@ def _sniff_image_format(data: bytes) -> str:
     return ""
 
 
+def _paginate_search(do_request, *, limit, after, fetch_all, page_cap=25):
+    """Run a search, optionally looping the cursor server-side until exhausted.
+
+    do_request(after) -> raw client search result dict (keys "data", "cursor").
+    Returns (data, meta): data is the result list; meta carries the honest
+    pagination fields (has_more, next_cursor, and total/hit_cap/note for fetch_all).
+    On a first-page error the exception propagates (becomes isError); on a
+    mid-loop error the accumulated data is returned with a warning note.
+    """
+    if not fetch_all:
+        result = do_request(after)
+        data = result.get("data") or []
+        next_cursor = (result.get("cursor") or {}).get("after")
+        meta = {"has_more": next_cursor is not None, "next_cursor": next_cursor}
+        if next_cursor is not None:
+            meta["note"] = (
+                f"Returned {len(data)} results but more exist; this is NOT the "
+                "complete set. Pass fetch_all=True for all matches, or "
+                "after=<next_cursor> for the next page."
+            )
+        return data, meta
+
+    data = []
+    cursor_in = after
+    pages = 0
+    error = None
+    while True:
+        try:
+            result = do_request(cursor_in)
+        except Exception as e:  # noqa: BLE001
+            error = e
+            break
+        data.extend(result.get("data") or [])
+        pages += 1
+        cursor_in = (result.get("cursor") or {}).get("after")
+        if cursor_in is None or pages >= page_cap:
+            break
+    if error is not None and not data:
+        raise error  # first-page failure -> isError via handle_api_errors
+    if error is not None:
+        return data, {
+            "has_more": True,
+            "next_cursor": cursor_in,
+            "total": len(data),
+            "note": (
+                f"Stopped after a mid-fetch error ({error}); returned {len(data)} "
+                "results so far. Retry with after=<next_cursor> to continue."
+            ),
+        }
+    hit_cap = cursor_in is not None
+    meta = {
+        "has_more": hit_cap,
+        "next_cursor": cursor_in,
+        "total": len(data),
+        "hit_cap": hit_cap,
+    }
+    if hit_cap:
+        meta["note"] = (
+            f"Stopped at the {page_cap}-page (~{page_cap * 100}-result) safety cap "
+            f"with {len(data)} results; narrow the query or pass after=<next_cursor> "
+            "to continue."
+        )
+    return data, meta
+
+
 def register_tools(  # noqa: C901
     mcp: FastMCP,
     get_client_func: Callable[[], PhabricatorClient],
@@ -135,9 +200,13 @@ def register_tools(  # noqa: C901
         include_availability: bool = False,
         limit: int = 100,
         after: str = None,
+        fetch_all: bool = False,
     ) -> dict:
         """
         Search for users with advanced filtering capabilities.
+        A single call returns at most ~100 results and is NOT exhaustive. For
+        'all/every/identify-all' queries, pass fetch_all=True to get the complete
+        set in one call.
 
         Args:
             query_key: Builtin query ("active", "admin", "all", "approval")
@@ -158,6 +227,7 @@ def register_tools(  # noqa: C901
             include_availability: Include user availability information in results
             limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
             after: opaque cursor from a prior call's "next_cursor" field; pass it to fetch the next page. Omit for the first page.
+            fetch_all: When True, loops the cursor server-side (up to a 25-page safety cap) to return all matching results in one call. Default: False.
 
         Returns:
             Search results with user data and pagination metadata
@@ -207,22 +277,17 @@ def register_tools(  # noqa: C901
         if include_availability:
             attachments["availability"] = True
 
-        # Call the search API
-        result = client.user.search(
-            query_key=query_key or None,
-            constraints=constraints if constraints else None,
-            attachments=attachments if attachments else None,
-            order=order or None,
-            limit=limit,
-            after=after,
-        )
-
-        # Add pagination metadata
-        result = _add_pagination_metadata(result, result.get("cursor"))
-
-        out = {"success": True, "users": result["data"], "cursor": result["cursor"]}
-        out["next_cursor"] = (result.get("cursor") or {}).get("after")
-        return out
+        def _do(after_cur):
+            return client.user.search(
+                query_key=query_key or None,
+                constraints=constraints if constraints else None,
+                attachments=attachments if attachments else None,
+                order=order or None,
+                limit=limit,
+                after=after_cur,
+            )
+        data, meta = _paginate_search(_do, limit=limit, after=after, fetch_all=fetch_all)
+        return {"success": True, "users": data, **meta}
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
@@ -543,12 +608,16 @@ def register_tools(  # noqa: C901
         include_description: bool = True,
         limit: int = 100,
         after: str = None,
+        fetch_all: bool = False,
         preset: Literal[
             "all", "assigned", "authored", "open", "high_priority", "recent"
         ] = None,
     ) -> dict:
         """
         Advanced task search with filtering and preset options.
+        A single call returns at most ~100 results and is NOT exhaustive. For
+        'all/every/identify-all' queries, pass fetch_all=True to get the complete
+        set in one call.
 
         Args:
             query_key: Builtin query ("assigned", "authored", "subscribed", "open", "all")
@@ -572,13 +641,18 @@ def register_tools(  # noqa: C901
             include_description: Include task description in results (default: True). Set to False
                 to omit fields.description from each task, reducing payload size by ~70-90% for
                 typical tasks. Use when only metadata (id, title, status, priority) is needed.
+                Forced to False when fetch_all=True to keep large result sets manageable.
             limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
             after: opaque cursor from a prior call's "next_cursor" field; pass it to fetch the next page. Omit for the first page.
+            fetch_all: When True, loops the cursor server-side (up to a 25-page safety cap) to return all matching results in one call. Forces include_description=False. Default: False.
             preset: Preset search configurations for common use cases
 
         Returns:
             Search results with task data and pagination metadata
         """
+        if fetch_all:
+            include_description = False
+
         # Initialize None parameters to empty lists
         if assigned is None:
             assigned = []
@@ -661,25 +735,20 @@ def register_tools(  # noqa: C901
         if include_columns:
             attachments["columns"] = True
 
-        result = client.maniphest.search_tasks(
-            query_key=query_key or None,
-            constraints=constraints if constraints else None,
-            attachments=attachments if attachments else None,
-            order=order or None,
-            limit=limit,
-            after=after,
-        )
-
+        def _do(after_cur):
+            return client.maniphest.search_tasks(
+                query_key=query_key or None,
+                constraints=constraints if constraints else None,
+                attachments=attachments if attachments else None,
+                order=order or None,
+                limit=limit,
+                after=after_cur,
+            )
+        data, meta = _paginate_search(_do, limit=limit, after=after, fetch_all=fetch_all)
         if not include_description:
-            for task in result.get("data", []):
+            for task in data:
                 task.get("fields", {}).pop("description", None)
-
-        # Add pagination metadata
-        result = _add_pagination_metadata(result, result.get("cursor"))
-
-        out = {"success": True, "results": result}
-        out["next_cursor"] = (result.get("cursor") or {}).get("after")
-        return out
+        return {"success": True, "results": data, **meta}
 
     # Diffusion (Repository) Tools
 

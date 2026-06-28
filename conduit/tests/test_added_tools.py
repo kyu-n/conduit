@@ -839,5 +839,174 @@ class TestLiteralEnumTools(unittest.TestCase):
         self.assertTrue(result["success"])
 
 
+class TestPaginateSearchHelper(unittest.TestCase):
+    """Unit tests for the _paginate_search module-level helper."""
+
+    def _make_do(self, pages):
+        """Return a _do callable that yields each page dict in turn."""
+        idx = [0]
+
+        def _do(after_cur):
+            result = pages[idx[0]]
+            idx[0] += 1
+            return result
+
+        return _do
+
+    def test_fetch_all_accumulates_three_pages(self):
+        from conduit.main_tools import _paginate_search
+
+        pages = [
+            {"data": [1, 2], "cursor": {"after": "p2"}},
+            {"data": [3, 4], "cursor": {"after": "p3"}},
+            {"data": [5], "cursor": {"after": None}},
+        ]
+        data, meta = _paginate_search(
+            self._make_do(pages), limit=100, after=None, fetch_all=True
+        )
+        self.assertEqual(data, [1, 2, 3, 4, 5])
+        self.assertFalse(meta["hit_cap"])
+        self.assertEqual(meta["total"], 5)
+        self.assertFalse(meta["has_more"])
+        self.assertIsNone(meta["next_cursor"])
+
+    def test_fetch_all_false_returns_page_one_with_note(self):
+        from conduit.main_tools import _paginate_search
+
+        pages = [{"data": [1, 2], "cursor": {"after": "p2"}}]
+        data, meta = _paginate_search(
+            self._make_do(pages), limit=100, after=None, fetch_all=False
+        )
+        self.assertEqual(data, [1, 2])
+        self.assertTrue(meta["has_more"])
+        self.assertEqual(meta["next_cursor"], "p2")
+        self.assertIn("note", meta)
+
+    def test_fetch_all_false_no_more_no_note(self):
+        from conduit.main_tools import _paginate_search
+
+        pages = [{"data": [1, 2], "cursor": {"after": None}}]
+        data, meta = _paginate_search(
+            self._make_do(pages), limit=100, after=None, fetch_all=False
+        )
+        self.assertEqual(data, [1, 2])
+        self.assertFalse(meta["has_more"])
+        self.assertIsNone(meta["next_cursor"])
+        self.assertNotIn("note", meta)
+
+    def test_page_cap_stops_loop_with_hit_cap_and_note(self):
+        from conduit.main_tools import _paginate_search
+
+        n = [0]
+
+        def _do(after_cur):
+            n[0] += 1
+            return {"data": [n[0]], "cursor": {"after": f"p{n[0]}"}}
+
+        data, meta = _paginate_search(_do, limit=100, after=None, fetch_all=True, page_cap=25)
+        self.assertEqual(len(data), 25)
+        self.assertTrue(meta["hit_cap"])
+        self.assertTrue(meta["has_more"])
+        self.assertIsNotNone(meta["next_cursor"])
+        self.assertIn("note", meta)
+
+    def test_mid_loop_error_returns_partial_with_note_not_raised(self):
+        from conduit.main_tools import _paginate_search
+
+        n = [0]
+
+        def _do(after_cur):
+            n[0] += 1
+            if n[0] == 1:
+                return {"data": [100], "cursor": {"after": "p2"}}
+            raise RuntimeError("mid-loop failure")
+
+        data, meta = _paginate_search(_do, limit=100, after=None, fetch_all=True)
+        self.assertEqual(data, [100])
+        self.assertTrue(meta["has_more"])
+        self.assertIn("note", meta)
+
+    def test_first_page_error_propagates(self):
+        from conduit.main_tools import _paginate_search
+
+        def _do(after_cur):
+            raise RuntimeError("first page error")
+
+        with self.assertRaises(RuntimeError):
+            _paginate_search(_do, limit=100, after=None, fetch_all=True)
+
+
+class TestPhaTaskSearchAdvancedFetchAll(unittest.TestCase):
+    """pha_task_search_advanced: fetch_all accumulates pages and forces description off."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_task_search_advanced")
+
+    def _multi_page_client(self):
+        client = Mock()
+        pages = [
+            {
+                "data": [
+                    {"id": i, "fields": {"description": {"raw": "d"}}}
+                    for i in range(1, 4)
+                ],
+                "cursor": {"after": "p2"},
+            },
+            {
+                "data": [
+                    {"id": i, "fields": {"description": {"raw": "d"}}}
+                    for i in range(4, 7)
+                ],
+                "cursor": {"after": None},
+            },
+        ]
+        n = [0]
+
+        def search(**kw):
+            result = pages[n[0]]
+            n[0] += 1
+            return result
+
+        client.maniphest.search_tasks.side_effect = search
+        return client
+
+    def test_fetch_all_accumulates_all_pages(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(fetch_all=True)
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["results"], list)
+        self.assertEqual(len(result["results"]), 6)
+        self.assertEqual(result["total"], 6)
+        self.assertFalse(result["has_more"])
+
+    def test_fetch_all_forces_description_off(self):
+        client = self._multi_page_client()
+        result = self._fn(client)(fetch_all=True, include_description=True)
+        self.assertTrue(result["success"])
+        for task in result["results"]:
+            self.assertNotIn("description", task.get("fields", {}))
+
+    def test_results_is_list_not_dict(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"id": 1}],
+            "cursor": {"after": None},
+        }
+        result = self._fn(client)(limit=5)
+        self.assertTrue(result["success"])
+        self.assertIsInstance(result["results"], list)
+
+    def test_fetch_all_false_has_more_and_note_when_more_pages(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"id": 1}, {"id": 2}],
+            "cursor": {"after": "PAGE2"},
+        }
+        result = self._fn(client)(limit=2)
+        self.assertTrue(result["has_more"])
+        self.assertEqual(result["next_cursor"], "PAGE2")
+        self.assertIn("note", result)
+
+
 if __name__ == "__main__":
     unittest.main()
