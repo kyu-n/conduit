@@ -380,5 +380,24 @@ class TestBaseHttpErrorCodes(unittest.TestCase):
         self.assertEqual(ctx.exception.error_code, "ERR-RATE-LIMITING")
 
 
+class TestHandleApiErrorsLogging(unittest.TestCase):
+    def test_generic_exception_logs_warning_and_returns_failure(self):
+        from conduit.tools.handlers import handle_api_errors
+
+        @handle_api_errors
+        def boom():
+            raise RuntimeError("boom")
+
+        with self.assertLogs("conduit", level="WARNING") as cm:
+            result = boom()
+
+        self.assertFalse(result["success"])
+        self.assertIn("boom", result["error"])
+        self.assertTrue(
+            any("boom" in msg for msg in cm.output),
+            f"Expected 'boom' in log output, got: {cm.output}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

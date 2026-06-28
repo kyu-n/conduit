@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 
@@ -7,6 +8,12 @@ from fastmcp.server.dependencies import get_http_headers
 
 from conduit.client import PhabricatorClient
 from conduit.main_tools import register_tools
+
+logging.basicConfig(
+    stream=sys.stderr,
+    level=getattr(logging, os.getenv("LOG_LEVEL", "WARNING").upper(), logging.WARNING),
+)
+logger = logging.getLogger("conduit")
 
 
 class PhabricatorConfig(object):
@@ -98,7 +105,7 @@ class ConduitApp:
 
     def run_sse_mode(self, host: str, port: int):
         """Run the application in SSE mode."""
-        print(f"Starting in HTTP/SSE mode on {host}:{port}", file=sys.stderr)
+        logger.info("Starting in HTTP/SSE mode on %s:%s", host, port)
         self.mcp.run(
             transport="sse",
             host=host,
@@ -108,7 +115,7 @@ class ConduitApp:
 
     def run_stdio_mode(self):
         """Run the application in stdio mode."""
-        print("Starting in stdio mode", file=sys.stderr)
+        logger.info("Starting in stdio mode")
         self.mcp.run(transport="stdio")
 
 
@@ -118,15 +125,15 @@ _app = None
 
 def print_server_info(config):
     """Print server configuration information."""
-    print("Starting Conduit MCP Server...", file=sys.stderr)
-    print(f"Phabricator URL: {config.url}", file=sys.stderr)
-    print(f"Token configured: {'Yes' if config.token else 'No'}", file=sys.stderr)
-    print(f"Proxy configured: {'Yes' if config.proxy else 'No'}", file=sys.stderr)
+    logger.info("Starting Conduit MCP Server...")
+    logger.info("Phabricator URL: %s", config.url)
+    logger.info("Token configured: %s", "Yes" if config.token else "No")
+    logger.info("Proxy configured: %s", "Yes" if config.proxy else "No")
     if config.proxy:
-        print(f"Proxy URL: {config.proxy}", file=sys.stderr)
-    print(
-        f"SSL certificate verification: {'Disabled' if config.disable_cert_verify else 'Enabled'}",
-        file=sys.stderr
+        logger.info("Proxy URL: %s", config.proxy)
+    logger.info(
+        "SSL certificate verification: %s",
+        "Disabled" if config.disable_cert_verify else "Enabled",
     )
 
 
@@ -165,11 +172,10 @@ def main():
         config = PhabricatorConfig(require_token=False)
         print_server_info(config)
 
-        print(
-            "Note: In HTTP/SSE mode, PHABRICATOR_TOKEN should be provided via HTTP headers:",
-            file=sys.stderr
+        logger.info(
+            "Note: In HTTP/SSE mode, PHABRICATOR_TOKEN should be provided via HTTP headers:"
         )
-        print("  - X-PHABRICATOR-TOKEN: <token>", file=sys.stderr)
+        logger.info("  - X-PHABRICATOR-TOKEN: <token>")
     else:
         config = PhabricatorConfig(require_token=True)
         print_server_info(config)

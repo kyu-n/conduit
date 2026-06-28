@@ -1,3 +1,4 @@
+import logging
 from functools import wraps
 from typing import Any, Callable, Dict
 
@@ -113,6 +114,7 @@ def handle_api_errors(func: Callable) -> Callable:
                 return result
             return {"success": True, "result": result}
         except PhabricatorAPIError as e:
+            logging.getLogger("conduit").warning("tool %s failed: %s", func.__name__, e)
             error_details = _get_error_details(e)
             response = {
                 "success": False,
@@ -125,6 +127,7 @@ def handle_api_errors(func: Callable) -> Callable:
                 response["error_info"] = e.error_info
             return response
         except Exception as e:
+            logging.getLogger("conduit").warning("tool %s failed: %s", func.__name__, e)
             error_details = _get_error_details(e)
             return {
                 "success": False,
