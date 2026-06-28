@@ -221,7 +221,7 @@ def register_tools(  # noqa: C901
             fulltext_query: Full-text search query string
             order: Result ordering ("newest", "oldest", "relevance")
             include_availability: Include user availability information in results
-            limit: Maximum number of results to return (default: 100, max: 1000)
+            limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
 
         Returns:
             Search results with user data and pagination metadata
@@ -604,8 +604,8 @@ def register_tools(  # noqa: C901
             query_key: Builtin query ("assigned", "authored", "subscribed", "open", "all")
             assigned: List of usernames or PHIDs of assignees
             author_phids: List of PHIDs of task authors
-            statuses: List of task statuses to filter by
-            priorities: List of priority levels to filter by
+            statuses: List of status keywords. Common values: open, resolved, wontfix, invalid, duplicate (open vs closed and the exact set are instance-defined).
+            priorities: List of priority integers. Phabricator defaults: 100=Unbreak Now, 90=Needs Triage, 80=High, 50=Normal, 25=Low, 0=Wishlist. These are instance-configurable (names may differ; the integer scale is standard).
             projects: List of project names or PHIDs to filter by
             subscribers: List of subscriber usernames or PHIDs
             fulltext_query: Full-text search query string
@@ -622,7 +622,7 @@ def register_tools(  # noqa: C901
             include_description: Include task description in results (default: True). Set to False
                 to omit fields.description from each task, reducing payload size by ~70-90% for
                 typical tasks. Use when only metadata (id, title, status, priority) is needed.
-            limit: Maximum number of results to return (default: 100, max: 1000)
+            limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
             preset: Preset search configurations for common use cases
 
         Returns:
@@ -740,8 +740,8 @@ def register_tools(  # noqa: C901
         Search for repositories in Phabricator.
 
         Args:
-            constraints: Search constraints dictionary (e.g., {"query": "repo_name", "vcs": "git"})
-            limit: Maximum number of results to return (default: 50, max: 500)
+            constraints: Dict of repository.search constraints. Common keys: ids (list[int]), phids (list[str]), callsigns (list[str]), shortNames (list[str]), types (list[str], e.g. ["git"]), status ("open"|"closed"), query (str fulltext).
+            limit: Maximum number of results to return. Default: 50. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
 
         Returns:
             Repository search results with data list and pagination metadata
@@ -1139,7 +1139,7 @@ def register_tools(  # noqa: C901
             status: Filter by status ("open", "closed", "abandoned", "accepted")
             repository: Filter by repository PHID (recommended) or name
             title_contains: Filter by title containing this text
-            limit: Maximum number of results to return (default: 50, max: 500)
+            limit: Maximum number of results to return. Default: 50. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
 
         Returns:
             List of matching code reviews with pagination metadata
@@ -1394,7 +1394,7 @@ def register_tools(  # noqa: C901
             has_parent: Filter for projects with/without parents
             icon: Filter by project icon
             color: Filter by project color
-            limit: Maximum number of results to return (default: 100, max: 1000)
+            limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
 
         Returns:
             Search results with project data and pagination metadata
@@ -1610,7 +1610,7 @@ def register_tools(  # noqa: C901
         Args:
             project_phids: List of project PHIDs to search columns in
             phids: List of specific column PHIDs to search for
-            limit: Maximum number of results to return (default: 100, max: 1000)
+            limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
 
         Returns:
             Search results with column data and pagination metadata
@@ -1690,7 +1690,7 @@ def register_tools(  # noqa: C901
 
         Args:
             column_phid: Column PHID to search tasks in
-            limit: Maximum number of results to return (default: 100, max: 1000)
+            limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
 
         Returns:
             Search results with task data and pagination metadata
