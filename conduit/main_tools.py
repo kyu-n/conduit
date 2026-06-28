@@ -134,6 +134,7 @@ def register_tools(  # noqa: C901
         order: str = "",
         include_availability: bool = False,
         limit: int = 100,
+        after: str = None,
     ) -> dict:
         """
         Search for users with advanced filtering capabilities.
@@ -156,6 +157,7 @@ def register_tools(  # noqa: C901
             order: Result ordering ("newest", "oldest", "relevance")
             include_availability: Include user availability information in results
             limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
+            after: opaque cursor from a prior call's "next_cursor" field; pass it to fetch the next page. Omit for the first page.
 
         Returns:
             Search results with user data and pagination metadata
@@ -212,12 +214,15 @@ def register_tools(  # noqa: C901
             attachments=attachments if attachments else None,
             order=order or None,
             limit=limit,
+            after=after,
         )
 
         # Add pagination metadata
         result = _add_pagination_metadata(result, result.get("cursor"))
 
-        return {"success": True, "users": result["data"], "cursor": result["cursor"]}
+        out = {"success": True, "users": result["data"], "cursor": result["cursor"]}
+        out["next_cursor"] = (result.get("cursor") or {}).get("after")
+        return out
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
@@ -526,6 +531,7 @@ def register_tools(  # noqa: C901
         include_columns: bool = False,
         include_description: bool = True,
         limit: int = 100,
+        after: str = None,
         preset: Literal[
             "all", "assigned", "authored", "open", "high_priority", "recent"
         ] = None,
@@ -556,6 +562,7 @@ def register_tools(  # noqa: C901
                 to omit fields.description from each task, reducing payload size by ~70-90% for
                 typical tasks. Use when only metadata (id, title, status, priority) is needed.
             limit: Maximum number of results to return. Default: 100. Note: Phabricator caps a single page at ~100 results regardless of this value; higher values are not honored.
+            after: opaque cursor from a prior call's "next_cursor" field; pass it to fetch the next page. Omit for the first page.
             preset: Preset search configurations for common use cases
 
         Returns:
@@ -649,6 +656,7 @@ def register_tools(  # noqa: C901
             attachments=attachments if attachments else None,
             order=order or None,
             limit=limit,
+            after=after,
         )
 
         if not include_description:
@@ -658,7 +666,9 @@ def register_tools(  # noqa: C901
         # Add pagination metadata
         result = _add_pagination_metadata(result, result.get("cursor"))
 
-        return {"success": True, "results": result}
+        out = {"success": True, "results": result}
+        out["next_cursor"] = (result.get("cursor") or {}).get("after")
+        return out
 
     # Diffusion (Repository) Tools
 

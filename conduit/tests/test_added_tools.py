@@ -507,5 +507,77 @@ class TestTextPayloadCapping(unittest.TestCase):
         self.assertEqual(result["original_length"], len(short_msg))
 
 
+class TestPhaTaskSearchAdvancedPagination(unittest.TestCase):
+    """next_cursor is surfaced at the top level from the cursor.after field."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_task_search_advanced")
+
+    def test_next_cursor_present_when_cursor_after_set(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"id": 1}, {"id": 2}],
+            "cursor": {"after": "PAGE2", "before": None, "limit": 5},
+        }
+        result = self._fn(client)(limit=5)
+        self.assertTrue(result["success"])
+        self.assertEqual(result["next_cursor"], "PAGE2")
+
+    def test_next_cursor_none_when_no_more_pages(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [{"id": 3}],
+            "cursor": {"after": None, "before": None, "limit": 5},
+        }
+        result = self._fn(client)(limit=5)
+        self.assertIsNone(result["next_cursor"])
+
+    def test_after_forwarded_to_client(self):
+        client = Mock()
+        client.maniphest.search_tasks.return_value = {
+            "data": [],
+            "cursor": {"after": None, "before": None, "limit": 5},
+        }
+        self._fn(client)(after="PAGE2", limit=5)
+        _call = client.maniphest.search_tasks.call_args
+        self.assertEqual(_call.kwargs.get("after"), "PAGE2")
+
+
+class TestPhaUserSearchPagination(unittest.TestCase):
+    """next_cursor is surfaced at the top level from the cursor.after field."""
+
+    def _fn(self, client):
+        return _tool_fn(client, "pha_user_search")
+
+    def test_next_cursor_present_when_cursor_after_set(self):
+        client = Mock()
+        client.user.search.return_value = {
+            "data": [{"id": 10}, {"id": 11}],
+            "cursor": {"after": "USERPAGE2", "before": None, "limit": 5},
+        }
+        result = self._fn(client)(limit=5)
+        self.assertTrue(result["success"])
+        self.assertEqual(result["next_cursor"], "USERPAGE2")
+
+    def test_next_cursor_none_when_no_more_pages(self):
+        client = Mock()
+        client.user.search.return_value = {
+            "data": [{"id": 12}],
+            "cursor": {"after": None, "before": None, "limit": 5},
+        }
+        result = self._fn(client)(limit=5)
+        self.assertIsNone(result["next_cursor"])
+
+    def test_after_forwarded_to_client(self):
+        client = Mock()
+        client.user.search.return_value = {
+            "data": [],
+            "cursor": {"after": None, "before": None, "limit": 5},
+        }
+        self._fn(client)(after="USERPAGE2", limit=5)
+        _call = client.user.search.call_args
+        self.assertEqual(_call.kwargs.get("after"), "USERPAGE2")
+
+
 if __name__ == "__main__":
     unittest.main()
