@@ -1,5 +1,9 @@
 # Conduit MCP Server - AI Development Guide
 
+> **Are you an agent here to _use_ the conduit server (read Phorge tasks/mockups),
+> not develop it?** Stop and follow [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md)
+> instead. This file is for working _on_ conduit's own code.
+
 ## Architecture Overview
 
 Conduit is a Model Context Protocol (MCP) server that provides seamless integration with Phabricator and Phorge APIs through a modular client pattern with unified entry points.

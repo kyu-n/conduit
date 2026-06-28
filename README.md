@@ -1,6 +1,11 @@
 # Conduit - The MCP Server for Phabricator and Phorge
 Conduit is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that provides seamless integration with Phabricator and Phorge APIs, enabling advanced automation and interaction capabilities for developers and tools.
 
+> **AI agents:** if you are an agent (Claude Code, Codex, Gemini CLI, Hermes, or Pi)
+> setting yourself up to use this server, follow
+> [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md) start to finish. It is an
+> agent-addressed runbook with per-agent registration and a self-check.
+
 ## Features
 **Modern HTTP Client**: Built with `httpx` for HTTP/2 support and better performance
 
@@ -57,8 +62,8 @@ token. Nothing is shared except the code.
    server. The token is read from the environment via `${PHABRICATOR_TOKEN}`, so
    no secrets are committed.
 
-Using a different agent? See [docs/CLIENT_SETUP.md](docs/CLIENT_SETUP.md) for
-**Hermes** and **Pi** setup.
+Using a different agent (Codex, Gemini CLI, Hermes, Pi) or want the full
+agent-self-setup runbook? See [docs/AGENT_SETUP.md](docs/AGENT_SETUP.md).
 
 ### From Source
 To install from source for development or contribution:
