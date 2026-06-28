@@ -1,7 +1,7 @@
 # Conduit - The MCP Server for Phabricator and Phorge
 Conduit is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that provides seamless integration with Phabricator and Phorge APIs, enabling advanced automation and interaction capabilities for developers and tools.
 
-## Conduit
+## Features
 **Modern HTTP Client**: Built with `httpx` for HTTP/2 support and better performance
 
 **MCP Integration**: Ready-to-use MCP tools for task management
@@ -17,6 +17,14 @@ Conduit is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/intr
 - Runtime validation client for type safety
 - Configurable client with caching and retry mechanisms
 
+## What this fork adds
+Beyond upstream `cortex-app/conduit`:
+- **`pha_file_download`** — fetch a file attachment (e.g. a mockup) and return it as a viewable image, or metadata for non-image/oversized files.
+- **`pha_task_relationships`** — read a task's direct parents and subtasks, for walking the task tree.
+- **Configurable User-Agent** via `PHABRICATOR_USER_AGENT` (some Phorge operators require an identifying UA).
+- **Omittable descriptions** in `pha_task_search_advanced`, to save tokens on large result sets.
+- **Search-constraint fixes** — several `*.search` client methods (and `differential.setdiffproperty`) sent un-flattened nested constraints that Phorge rejected with a 500; they now route through `build_search_params`.
+
 ## Usage
 ### Via `uvx`
 You need to install `uv` first. If it is not installed, run the following command:
@@ -25,7 +33,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 After installation, restart your shell or terminal to apply the environment variable changes.
 
-Then run:
+Then run it standalone (a quick smoke test; for client integration see [Install from this fork](#install-from-this-fork)):
 ```bash
 uvx --from git+https://github.com/kyu-n/conduit.git@main conduit-mcp
 ```
@@ -49,9 +57,6 @@ token. Nothing is shared except the code.
    server. The token is read from the environment via `${PHABRICATOR_TOKEN}`, so
    no secrets are committed.
 
-The server pins to the `main` branch via
-`git+https://github.com/kyu-n/conduit.git@main`.
-
 Using a different agent? See [docs/CLIENT_SETUP.md](docs/CLIENT_SETUP.md) for
 **Hermes** and **Pi** setup.
 
@@ -68,9 +73,6 @@ pip install -e .[dev]
 ```
 
 This will install the package in editable mode with all development dependencies.
-
-### Docker
-We are still working on Docker support. We estimate it will be available soon.
 
 ### As HTTP/SSE Server
 Conduit can run as an HTTP/SSE server for multi-user scenarios. This mode allows multiple clients to connect simultaneously, each using their own authentication tokens.
@@ -96,7 +98,7 @@ export PHABRICATOR_PROXY="socks5://127.0.0.1:1080"  # Optional, if your network 
 export PHABRICATOR_DISABLE_CERT_VERIFY=1  # Optional, if your network is under HTTPS filter (WARNING: Disabling certificate verification can expose you to security risks. Only set this if you trust your network environment.)
 export PHABRICATOR_USER_AGENT="MyOrg-Phabricator-MCP/1.0 (contact@example.org)"  # Optional, override the default User-Agent header. Some Phabricator/Phorge operators require identifying contact info for rate-limiting purposes.
 ```
-Do note that in HTTPS/SSE mode, `PHABRICATOR_TOKEN` is NOT needed.
+Do note that in HTTP/SSE mode, `PHABRICATOR_TOKEN` is NOT needed.
 
 ### Getting Your API Token
 1. Log into your Phabricator instance
@@ -110,6 +112,6 @@ file issues and pull requests there. After `pip install -e .[dev]`, run the test
 with `pytest`.
 
 ## License
-Copyright (c) 2025 mpcnow.io. all rights reserved.
+Copyright (c) 2025 mcpnow.io
 
 Licensed under the [MIT](LICENSE) license.
