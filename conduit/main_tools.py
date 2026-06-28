@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastmcp import FastMCP
 from fastmcp.utilities.types import Image
+from mcp.types import ToolAnnotations
 
 from conduit.client.types import (
     ManiphestSearchAttachments,
@@ -164,7 +165,7 @@ def register_tools(  # noqa: C901
         get_client_func: Function to get Phabricator client instance
     """
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_user_whoami() -> dict:
         """
@@ -178,7 +179,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "user": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_user_search(
@@ -284,7 +285,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "users": result["data"], "cursor": result["cursor"]}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_task_create(
         title: str, description: str = "", owner_phid: str = ""
@@ -308,7 +309,7 @@ def register_tools(  # noqa: C901
         )
         return {"success": True, "task": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_task_get(task_id: str) -> dict:
         """
@@ -332,7 +333,7 @@ def register_tools(  # noqa: C901
         result = client.maniphest.get_task(int(m.group(1)))
         return {"success": True, "task": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     @handle_api_errors
     def pha_task_update(
         task_id: str,
@@ -412,7 +413,7 @@ def register_tools(  # noqa: C901
         )
         return {"success": True}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_task_add_comment(task_id: str, comment: str) -> dict:
         """
@@ -437,7 +438,7 @@ def register_tools(  # noqa: C901
         )
         return {"success": True}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_task_get_transactions(task_id: str) -> dict:
@@ -475,7 +476,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "transactions": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_task_get_personal(
         task_type: Literal["assigned", "authored"] = "assigned",
@@ -519,7 +520,7 @@ def register_tools(  # noqa: C901
                 "error": "Invalid task_type. Use 'assigned' or 'authored'",
             }
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     @handle_api_errors
     def pha_task_update_relationships(
         task_id: str,
@@ -568,7 +569,7 @@ def register_tools(  # noqa: C901
         )
         return {"success": True}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_task_search_advanced(
@@ -728,7 +729,7 @@ def register_tools(  # noqa: C901
 
     # Diffusion (Repository) Tools
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_repository_search(
@@ -759,7 +760,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "repositories": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_repository_create(
         name: str,
@@ -790,7 +791,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "repository": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_repository_info(repository_identifier: str) -> dict:
         """
@@ -861,7 +862,7 @@ def register_tools(  # noqa: C901
                 "error": f"Repository '{repository_identifier}' not found",
             }
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_repository_browse(
@@ -893,7 +894,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "browse_result": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_repository_file_content(
         repository: str,
@@ -944,7 +945,7 @@ def register_tools(  # noqa: C901
         # Combine metadata with actual decoded content
         return {"success": True, "file_content": file_content, "metadata": file_info}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_repository_history(
@@ -979,7 +980,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "history": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_repository_branches(repository: str) -> dict:
         """
@@ -997,7 +998,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "branches": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_repository_commits_search(
         repository: str = "",
@@ -1035,7 +1036,7 @@ def register_tools(  # noqa: C901
 
     # Differential (Code Review) Tools
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_diff_create_from_content(
         diff_content: str,
@@ -1074,7 +1075,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "diff": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_diff_create(
         diff_id: str,
@@ -1118,7 +1119,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "revision": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_diff_search(
@@ -1166,7 +1167,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "revisions": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_diff_get(revision_id: str) -> dict:
         """
@@ -1204,7 +1205,7 @@ def register_tools(  # noqa: C901
         else:
             return {"success": False, "error": f"Revision {revision_id} not found"}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_diff_add_comment(
         revision_id: str,
@@ -1239,7 +1240,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "comment_added": True}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     @handle_api_errors
     def pha_diff_update(
         revision_id: str,
@@ -1287,7 +1288,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "revision": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_diff_get_content(diff_phid: str) -> dict:
         """
@@ -1331,7 +1332,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "diff_content": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_diff_get_commit_message(revision_id: str) -> dict:
         """
@@ -1355,7 +1356,7 @@ def register_tools(  # noqa: C901
 
     # Project API Tools
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_project_search(
@@ -1446,7 +1447,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "projects": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @handle_api_errors
     def pha_project_create(
         name: str,
@@ -1477,7 +1478,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "project": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_project_get(project_identifier: str) -> dict:
         """
@@ -1547,7 +1548,7 @@ def register_tools(  # noqa: C901
                 "error": f"Project '{project_identifier}' not found",
             }
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     @handle_api_errors
     def pha_project_update(
         project_phid: str,
@@ -1595,7 +1596,7 @@ def register_tools(  # noqa: C901
 
     # Workboard Tools
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_workboard_search_columns(
@@ -1640,7 +1641,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "columns": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     @handle_api_errors
     def pha_workboard_move_task(
         task_id: str,
@@ -1677,7 +1678,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "task": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     @optimize_token_usage
     def pha_workboard_search_tasks_by_column(
@@ -1711,7 +1712,7 @@ def register_tools(  # noqa: C901
 
         return {"success": True, "tasks": result}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     def pha_file_download(file_ref: str):
         """
         Download a file attached to a task (typically a mockup image) and, when
@@ -1846,7 +1847,7 @@ def register_tools(  # noqa: C901
                 "error": f"Failed to download {file_ref}: {e}",
             }
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @handle_api_errors
     def pha_task_relationships(task_id: str) -> dict:
         """

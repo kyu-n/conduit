@@ -399,5 +399,40 @@ class TestHandleApiErrorsLogging(unittest.TestCase):
         )
 
 
+class TestToolAnnotations(unittest.TestCase):
+    """Every @mcp.tool() must carry readOnlyHint; mutators also set destructiveHint."""
+
+    def _get_tool(self, name):
+        mcp = FastMCP("test")
+        register_tools(mcp, lambda: Mock())
+        return asyncio.run(mcp.get_tool(name))
+
+    def test_read_tool_has_readonly_true(self):
+        tool = self._get_tool("pha_task_get")
+        self.assertIsNotNone(tool.annotations)
+        self.assertIs(tool.annotations.readOnlyHint, True)
+
+    def test_mutate_update_has_readonly_false_destructive_true(self):
+        tool = self._get_tool("pha_task_update")
+        self.assertIsNotNone(tool.annotations)
+        self.assertIs(tool.annotations.readOnlyHint, False)
+        self.assertIs(tool.annotations.destructiveHint, True)
+
+    def test_mutate_create_has_readonly_false_destructive_false(self):
+        tool = self._get_tool("pha_task_create")
+        self.assertIsNotNone(tool.annotations)
+        self.assertIs(tool.annotations.readOnlyHint, False)
+        self.assertIs(tool.annotations.destructiveHint, False)
+
+    def test_all_tools_have_annotations(self):
+        mcp = FastMCP("test")
+        register_tools(mcp, lambda: Mock())
+        tools = asyncio.run(mcp.list_tools())
+        for tool in tools:
+            self.assertIsNotNone(
+                tool.annotations, f"Tool {tool.name} has no annotations"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
