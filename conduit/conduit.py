@@ -12,6 +12,7 @@ from starlette.middleware import Middleware
 
 from conduit.client import PhabricatorClient
 from conduit.client.base import DEFAULT_USER_AGENT
+from conduit.guide import register_guide
 from conduit.http_security import TokenGate, register_health, _TOKEN_RE
 from conduit.main_tools import register_tools
 
@@ -138,8 +139,9 @@ class ConduitApp:
         return self._client
 
     def register_tools(self):
-        """Register all MCP tools."""
+        """Register all MCP tools, plus the usage guide tool and tackle prompt."""
         register_tools(self.mcp, self.get_client)
+        register_guide(self.mcp)
 
     def run_http_mode(self, host: str, port: int, path: str):
         """Run in Streamable HTTP mode (loopback-only in M1)."""

@@ -251,6 +251,23 @@ the full set via your client's tool list.
 
 ---
 
+## Using conduit (once connected)
+
+Reaching the tools is not the same as knowing how to drive them. The workflow
+knowledge ships in the server, so you do not need this README to use it:
+
+- Call the **`conduit_guide`** tool for the full guide: the tool catalogue, the
+  "tackle a task" workflow (read a task, view its mockups, walk the task tree), id
+  handling (numeric vs `T`-prefixed), mockup embeds (`{F123}`), search pagination
+  (`fetch_all`), read-vs-write tools, and failure modes. Call it first if you are
+  unsure how to proceed.
+- If your client supports MCP prompts, request the **`tackle`** prompt with a task
+  id for a ready-to-run, step-by-step workflow.
+
+Full text: [`docs/USING_CONDUIT.md`](USING_CONDUIT.md) / `conduit/guide.py`.
+
+---
+
 ## 5. Troubleshoot (run the check that matches your symptom)
 
 - **Startup error `PHABRICATOR_TOKEN is required` / `Failed to connect`** — the
