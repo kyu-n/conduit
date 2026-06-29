@@ -227,9 +227,22 @@ def main():
 
     args = parser.parse_args()
 
+    # A CONDUIT_TRANSPORT env value is used as the default and bypasses argparse's
+    # choices= validation, so reject an unknown value rather than silently using stdio.
+    if args.transport is not None and args.transport not in ("stdio", "http"):
+        print(
+            f"Error: invalid transport {args.transport!r} (from CONDUIT_TRANSPORT); "
+            "use 'stdio' or 'http'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Bare --host/--port without --transport is a hard error pointing at --transport http.
     if args.transport is None:
-        has_host_port = any(a in sys.argv for a in ["--host", "-H", "--port", "-p"])
+        has_host_port = any(
+            a in ("--host", "-H", "--port", "-p") or a.startswith(("--host=", "--port="))
+            for a in sys.argv
+        )
         if has_host_port:
             print(
                 "Error: --host/--port without --transport is not supported. "

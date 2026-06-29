@@ -145,10 +145,10 @@ async def test_valid_api_token_passes_gate(starlette_app):
                     "capabilities": {},
                     "clientInfo": {"name": "test", "version": "0"},
                 }},
-                headers={"x-phabricator-token": VALID_API},
+                headers={"x-phabricator-token": VALID_API, "Accept": "application/json"},
             )
-    # TokenGate accepted the token; any non-401/400 means the gate passed.
-    assert resp.status_code not in (400, 401)
+    # TokenGate accepted the token and the stateless initialize returned a result.
+    assert resp.status_code == 200
 
 
 async def test_valid_cli_token_passes_gate(starlette_app):
@@ -163,9 +163,9 @@ async def test_valid_cli_token_passes_gate(starlette_app):
                     "capabilities": {},
                     "clientInfo": {"name": "test", "version": "0"},
                 }},
-                headers={"x-phabricator-token": VALID_CLI},
+                headers={"x-phabricator-token": VALID_CLI, "Accept": "application/json"},
             )
-    assert resp.status_code not in (400, 401)
+    assert resp.status_code == 200
 
 
 async def test_loopback_post_not_421(starlette_app):
@@ -236,6 +236,9 @@ async def test_wrappers_share_same_http_client(conduit_app, starlette_app):
         # Each sends its own token
         assert client_a.maniphest.api_token == VALID_API
         assert client_b.maniphest.api_token == VALID_CLI
+
+        # No-bleed: the shared pool itself carries no token header
+        assert "x-phabricator-token" not in conduit_app._shared_client.headers
 
 
 async def test_wrapper_close_does_not_close_shared_client(conduit_app, starlette_app):
