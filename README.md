@@ -79,19 +79,47 @@ pip install -e .[dev]
 
 This will install the package in editable mode with all development dependencies.
 
-### As HTTP/SSE Server
-> **Note:** The HTTP+SSE transport is deprecated as of MCP spec 2025-03-26 in favor of Streamable HTTP, and is kept here only for backward compatibility.
+### As a Streamable HTTP server
+Conduit speaks the MCP **Streamable HTTP** transport for multi-user scenarios:
+many clients connect to one server, each authenticating with its own token. The
+deprecated HTTP+SSE transport has been removed in favor of it.
 
-Conduit can run as an HTTP/SSE server for multi-user scenarios. This mode allows multiple clients to connect simultaneously, each using their own authentication tokens.
-
+Run it bound to loopback for local use:
 ```bash
-conduit-mcp --host 127.0.0.1 --port 8000
+conduit-mcp --transport http --host 127.0.0.1 --port 8000 --path /mcp
 ```
-When running as an HTTP server, authentication tokens are provided via HTTP headers instead of environment variables.
+In HTTP mode the server holds no Phabricator credentials. Each request carries
+the caller's token in a header, so access is revocable per user at Phorge:
+```
+X-PHABRICATOR-TOKEN: api-xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+`PHABRICATOR_TOKEN` is not read in HTTP mode.
 
+#### Exposing it publicly
+A non-loopback bind is refused unless you opt in with `CONDUIT_ALLOW_PUBLIC=1`,
+which also requires Host/Origin allowlists, turns on DNS-rebinding protection,
+and defaults to read-only. The supported public deployment is the
+[`docker-compose.yml`](docker-compose.yml): Caddy terminates TLS and rate-limits
+per IP, conduit runs behind it on an internal network with no published port.
+```bash
+cp .env.example .env   # fill in domain, ACME email, Phorge URL, allowlists
+docker compose up -d --build
 ```
-X-PHABRICATOR-TOKEN: your-32-character-token-here
-```
+
+The `X-Phabricator-Token` check is a *shape* filter, not authentication: any
+well-formed token string passes the gate and can list the tool catalogue and
+trigger one Phorge call per request (Phorge, holding the real credentials,
+rejects an unissued token, so nothing is exfiltrated). If catalogue disclosure
+or that request amplification matters for your exposure, put real authentication
+(mTLS or a gateway credential) in front of `/mcp`.
+
+| HTTP-mode variable | Purpose |
+|--------------------|---------|
+| `CONDUIT_TRANSPORT` | `stdio` (default) or `http`; same as `--transport`. |
+| `CONDUIT_ALLOW_PUBLIC` | `1` permits a non-loopback bind. Required for public exposure. |
+| `CONDUIT_ALLOWED_HOSTS` | Comma-separated Host values to accept (required when public). |
+| `CONDUIT_ALLOWED_ORIGINS` | Comma-separated Origin values to accept (required when public). |
+| `CONDUIT_READONLY` | `1`/`0`; drops write tools from the catalogue. Defaults on when public. |
 
 ## Configuration
 Before running the server, you need to set up the following environment variables:
@@ -105,7 +133,7 @@ export PHABRICATOR_PROXY="socks5://127.0.0.1:1080"  # Optional, if your network 
 export PHABRICATOR_DISABLE_CERT_VERIFY=1  # Optional, if your network is under HTTPS filter (WARNING: Disabling certificate verification can expose you to security risks. Only set this if you trust your network environment.)
 export PHABRICATOR_USER_AGENT="MyOrg-Phabricator-MCP/1.0 (contact@example.org)"  # Optional, override the default User-Agent header. Some Phabricator/Phorge operators require identifying contact info for rate-limiting purposes.
 ```
-Do note that in HTTP/SSE mode, `PHABRICATOR_TOKEN` is NOT needed.
+Do note that in HTTP mode, `PHABRICATOR_TOKEN` is NOT needed.
 
 ### Getting Your API Token
 1. Log into your Phabricator instance

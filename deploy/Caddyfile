@@ -1,0 +1,32 @@
+{
+	email {$ACME_EMAIL}
+	# rate_limit is not in Caddy's default directive order; place it ahead of
+	# the proxy so it runs first.
+	order rate_limit before reverse_proxy
+}
+
+{$CONDUIT_DOMAIN} {
+	# Per-client-IP rate limit (github.com/mholt/caddy-ratelimit): 60 requests
+	# per minute per client IP. {client_ip} is the direct peer at the edge, and
+	# the real client when Caddy is behind a CDN/LB AND that LB's addresses are
+	# declared trusted (otherwise every request shares one bucket). For the
+	# behind-LB case add to the global block above:
+	#   servers { trusted_proxies static <LB CIDR> ... }
+	rate_limit {
+		zone conduit_per_ip {
+			key {client_ip}
+			events 60
+			window 1m
+		}
+	}
+
+	# Caddy preserves the client's Host header to the upstream by default, so
+	# the conduit container sees Host: {$CONDUIT_DOMAIN}. That value must be in
+	# CONDUIT_ALLOWED_HOSTS or conduit answers 421.
+	reverse_proxy conduit:8000
+
+	log {
+		output stdout
+		format console
+	}
+}

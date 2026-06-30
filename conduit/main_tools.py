@@ -153,6 +153,39 @@ def _paginate_search(do_request, *, after, fetch_all, page_cap=25):
     return data, meta
 
 
+class ReadonlyToolFilter:
+    """Wraps a FastMCP server during registration to drop write tools.
+
+    A tool is kept only when its annotations say ``readOnlyHint is True``;
+    anything else (a write/destructive tool, or a tool with no read-only
+    annotation) is not registered, so it never appears in ``tools/list``. The
+    predicate is fail-safe: an unannotated tool is treated as a write tool.
+    Every other attribute (``prompt``, ``custom_route``, ...) passes through to
+    the wrapped server unchanged.
+    """
+
+    def __init__(self, mcp):
+        self._mcp = mcp
+
+    def __getattr__(self, name):
+        return getattr(self._mcp, name)
+
+    def tool(self, *args, **kwargs):
+        annotations = kwargs.get("annotations")
+        if getattr(annotations, "readOnlyHint", None) is True:
+            return self._mcp.tool(*args, **kwargs)
+        # Bare @mcp.tool (function passed positionally) carries no annotation we
+        # can inspect; treat it as a write tool and skip, returning the function
+        # so the surrounding name binding still works.
+        if args and callable(args[0]):
+            return args[0]
+
+        def _skip(fn):
+            return fn
+
+        return _skip
+
+
 def register_tools(  # noqa: C901
     mcp: FastMCP,
     get_client_func: Callable[[], PhabricatorClient],

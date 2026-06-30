@@ -54,8 +54,9 @@ Code review (Differential):
 ## Read vs write
 The read tools above are safe to call freely. The ones marked WRITE change the
 Phorge instance (new tasks, comments, status changes, moved cards). Call them only
-when the user asked for a change. Some deployments treat the instance as read-only
-by policy; if so, avoid the WRITE tools entirely.
+when the user asked for a change. A read-only deployment does not register the
+WRITE tools at all, so they are absent from `tools/list`: trust the live tool list
+over this catalogue, and if a WRITE tool is missing the server is read-only.
 
 ## Task ids
 - `pha_task_get`, `pha_task_relationships`, and `pha_file_download` accept either form:

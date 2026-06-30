@@ -1,0 +1,55 @@
+# Public Streamable HTTP deployment: Caddy terminates TLS and rate-limits per
+# IP; conduit runs behind it on an internal network with no published port.
+#
+# Copy .env.example to .env and fill it in, then: docker compose up -d --build
+# The conduit container binds 0.0.0.0 (reachable only by Caddy over the compose
+# network) and requires CONDUIT_ALLOW_PUBLIC=1 plus Host/Origin allowlists.
+
+services:
+  conduit:
+    build: .
+    restart: unless-stopped
+    environment:
+      PHABRICATOR_URL: ${PHABRICATOR_URL:?set PHABRICATOR_URL in .env}
+      CONDUIT_ALLOW_PUBLIC: "1"
+      CONDUIT_ALLOWED_HOSTS: ${CONDUIT_ALLOWED_HOSTS:?set CONDUIT_ALLOWED_HOSTS in .env}
+      CONDUIT_ALLOWED_ORIGINS: ${CONDUIT_ALLOWED_ORIGINS:?set CONDUIT_ALLOWED_ORIGINS in .env}
+      # Defaults ON when public; set CONDUIT_READONLY=0 in .env to allow writes.
+      CONDUIT_READONLY: ${CONDUIT_READONLY:-1}
+      PHABRICATOR_USER_AGENT: ${PHABRICATOR_USER_AGENT:-}
+      PHABRICATOR_PROXY: ${PHABRICATOR_PROXY:-}
+    # Override the image's loopback default: bind the container network so Caddy
+    # can reach it. Still private (no ports: published to the host).
+    command: ["conduit-mcp", "--transport", "http", "--host", "0.0.0.0", "--port", "8000", "--path", "/mcp"]
+    expose:
+      - "8000"
+    networks:
+      - edge
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/Caddy.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      conduit:
+        condition: service_healthy
+    environment:
+      CONDUIT_DOMAIN: ${CONDUIT_DOMAIN:?set CONDUIT_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+
+networks:
+  edge:
+
+volumes:
+  caddy_data:
+  caddy_config:

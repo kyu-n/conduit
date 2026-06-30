@@ -13,14 +13,47 @@ from starlette.middleware import Middleware
 from conduit.client import PhabricatorClient
 from conduit.client.base import DEFAULT_USER_AGENT
 from conduit.guide import register_guide
-from conduit.http_security import TokenGate, register_health, _TOKEN_RE
-from conduit.main_tools import register_tools
+from conduit.http_security import (
+    TokenGate,
+    install_token_redaction,
+    register_health,
+    _TOKEN_RE,
+)
+from conduit.main_tools import ReadonlyToolFilter, register_tools
 
 logging.basicConfig(
     stream=sys.stderr,
     level=getattr(logging, os.getenv("LOG_LEVEL", "WARNING").upper(), logging.WARNING),
 )
 logger = logging.getLogger("conduit")
+
+
+_TRUTHY = {"1", "true", "yes", "on"}
+_FALSEY = {"0", "false", "no", "off"}
+
+
+def _env_bool(name: str):
+    """Strict tri-state boolean env var: True/False for a recognized value,
+    None when unset. A set-but-unrecognized value raises, so a typo can never
+    silently pick the unsafe default (e.g. CONDUIT_READONLY=of would otherwise
+    read as falsey and expose write tools)."""
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    val = raw.strip().lower()
+    if val in _TRUTHY:
+        return True
+    if val in _FALSEY:
+        return False
+    raise ValueError(
+        f"{name}={raw!r} is not a recognized boolean "
+        "(use one of 1/0, true/false, yes/no, on/off)."
+    )
+
+
+def _env_list(name: str) -> list:
+    """Comma-separated env var to a stripped, non-empty list."""
+    return [p.strip() for p in os.getenv(name, "").split(",") if p.strip()]
 
 
 class PhabricatorConfig(object):
@@ -37,6 +70,18 @@ class PhabricatorConfig(object):
             "PHABRICATOR_DISABLE_CERT_VERIFY", ""
         ).lower() in ("1", "true", "yes")
         self.user_agent = os.getenv("PHABRICATOR_USER_AGENT") or None
+
+        # M2 public-surface settings (HTTP mode). Reading them in every mode is
+        # harmless; stdio simply never consults allow_public/allowlists.
+        self.allow_public = _env_bool("CONDUIT_ALLOW_PUBLIC") or False
+        self.allowed_origins = _env_list("CONDUIT_ALLOWED_ORIGINS")
+        self.allowed_hosts = _env_list("CONDUIT_ALLOWED_HOSTS")
+        # Read-only posture. Explicit CONDUIT_READONLY wins; otherwise default
+        # ON when binding publicly, OFF otherwise (safe-by-default exposure).
+        # _env_bool fails closed: an unrecognized value raises rather than
+        # silently exposing every write tool.
+        readonly = _env_bool("CONDUIT_READONLY")
+        self.readonly = self.allow_public if readonly is None else readonly
 
         if not http_mode and require_token and not self.token:
             raise ValueError("PHABRICATOR_TOKEN is required")
@@ -68,6 +113,7 @@ class ConduitApp:
     def __init__(self, config: PhabricatorConfig, http_mode: bool = False):
         self.config = config
         self.http_mode = http_mode
+        self.readonly = config.readonly
         self._shared_client = None
         self._client = None
         if http_mode:
@@ -139,12 +185,31 @@ class ConduitApp:
         return self._client
 
     def register_tools(self):
-        """Register all MCP tools, plus the usage guide tool and tackle prompt."""
-        register_tools(self.mcp, self.get_client)
-        register_guide(self.mcp)
+        """Register all MCP tools, plus the usage guide tool and tackle prompt.
+
+        In read-only mode write tools are dropped at registration so they never
+        reach ``tools/list``.
+        """
+        target = ReadonlyToolFilter(self.mcp) if self.readonly else self.mcp
+        register_tools(target, self.get_client)
+        register_guide(target)
 
     def run_http_mode(self, host: str, port: int, path: str):
-        """Run in Streamable HTTP mode (loopback-only in M1)."""
+        """Run in Streamable HTTP mode.
+
+        Loopback binds need nothing extra. A non-loopback bind is the public
+        surface and is refused unless CONDUIT_ALLOW_PUBLIC=1, which also
+        requires non-empty Origin and Host allowlists and turns on DNS-rebinding
+        protection. Read-only defaults on when public.
+        """
+        # /health is the one route TokenGate lets through unauthenticated; if the
+        # MCP endpoint were mounted there too it would inherit that bypass.
+        if path == "/health":
+            raise ValueError(
+                "--path /health collides with the unauthenticated health route; "
+                "choose a different MCP path (default /mcp)."
+            )
+
         if host == "localhost":
             is_loopback = True
         else:
@@ -153,13 +218,38 @@ class ConduitApp:
             except ValueError:
                 is_loopback = False
 
-        if not is_loopback:
+        public = self.config.allow_public
+
+        if not is_loopback and not public:
             raise ValueError(
-                f"Non-loopback bind refused (M1): '{host}'. "
-                "Use --host 127.0.0.1 (or localhost) with --transport http."
+                f"Non-loopback bind refused: '{host}'. Set CONDUIT_ALLOW_PUBLIC=1 "
+                "(plus CONDUIT_ALLOWED_HOSTS and CONDUIT_ALLOWED_ORIGINS) to expose "
+                "the server, or bind --host 127.0.0.1."
             )
 
-        logger.info("Starting in HTTP mode on %s:%s%s", host, port, path)
+        if public:
+            if not self.config.allowed_hosts:
+                raise ValueError(
+                    "CONDUIT_ALLOW_PUBLIC=1 requires CONDUIT_ALLOWED_HOSTS "
+                    "(comma-separated Host values to accept)."
+                )
+            if not self.config.allowed_origins:
+                raise ValueError(
+                    "CONDUIT_ALLOW_PUBLIC=1 requires CONDUIT_ALLOWED_ORIGINS "
+                    "(comma-separated Origin values to accept)."
+                )
+
+        # Never let a token reach the logs, in any mode.
+        install_token_redaction()
+
+        logger.info(
+            "Starting in HTTP mode on %s:%s%s (public=%s, readonly=%s)",
+            host,
+            port,
+            path,
+            public,
+            self.readonly,
+        )
         register_health(self.mcp)
         self.mcp.run(
             transport="http",
@@ -168,7 +258,14 @@ class ConduitApp:
             path=path,
             stateless_http=True,
             json_response=True,
-            middleware=[Middleware(TokenGate)],
+            middleware=[
+                Middleware(
+                    TokenGate,
+                    public=public,
+                    allowed_origins=self.config.allowed_origins,
+                    allowed_hosts=self.config.allowed_hosts,
+                )
+            ],
         )
 
     def run_stdio_mode(self):
