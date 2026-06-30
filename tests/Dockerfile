@@ -55,7 +55,7 @@ RUN useradd -m -s /bin/bash phorge && \
 RUN chown -R phorge:phorge /opt/phorge && \
     chown -R phorge:phorge /opt/arcanist
 
-COPY <<EOF /etc/nginx/sites-available/phorge
+COPY <<"EOF" /etc/nginx/sites-available/phorge
 server {
     listen 80;
     server_name phorge.local;
@@ -63,7 +63,7 @@ server {
 
     location / {
         index index.php;
-        rewrite ^/(.*)\$ /index.php?__path__=/\$1 last;
+        rewrite ^/(.*)$ /index.php?__path__=/$1 last;
     }
 
     location /index.php {
@@ -72,15 +72,15 @@ server {
 
         fastcgi_param REDIRECT_STATUS 200;
 
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param QUERY_STRING \$query_string;
-        fastcgi_param REQUEST_METHOD \$request_method;
-        fastcgi_param CONTENT_TYPE \$content_type;
-        fastcgi_param CONTENT_LENGTH \$content_length;
-        fastcgi_param SCRIPT_NAME \$fastcgi_script_name;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_param REQUEST_METHOD $request_method;
+        fastcgi_param CONTENT_TYPE $content_type;
+        fastcgi_param CONTENT_LENGTH $content_length;
+        fastcgi_param SCRIPT_NAME $fastcgi_script_name;
         fastcgi_param GATEWAY_INTERFACE CGI/1.1;
-        fastcgi_param SERVER_SOFTWARE nginx/\$nginx_version;
-        fastcgi_param REMOTE_ADDR \$remote_addr;
+        fastcgi_param SERVER_SOFTWARE nginx/$nginx_version;
+        fastcgi_param REMOTE_ADDR $remote_addr;
     }
 
     error_log /var/log/nginx/phorge_error.log;
@@ -130,7 +130,7 @@ RUN service mysql start && \
     echo "API Token saved to /opt/phorge/api_token.txt" && \
     service mysql stop
 
-COPY <<EOF /usr/local/bin/start-phorge.sh
+COPY <<"EOF" /usr/local/bin/start-phorge.sh
 #!/bin/bash
 
 # Ensure MySQL directory permissions
